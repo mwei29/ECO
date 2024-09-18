@@ -2,9 +2,23 @@
 title: "Perceived Stress Predicts Emotion Regulation Choice: The Role of Cognitive Resources, Depressive Symptoms, and Beliefs"
 author: "Mengzhe Wei, Tammy English"
 date: "`r Sys.Date()`"
-output: pdf_document
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: true
 ---
+
 # ECO Stress and ER Choice Analysis
+Notes: Started 17 Sep 2024 by Mengzhe Wei to run analysis looking at ER Decisions and strategy selection based on stress. 
+Within person (level 1): stress level in EMA
+Between person (level 2): Perceived stress scale
+Moderators: CES-D, dweck.sum (implicit beliefs about emotion), MCI groups (young, CN, MCI), cogflu.uc (cognitive fluid score uncorrected)
+Outcome variables: 
+1. Whether participant chose to influence their emotions; 
+2. the frequency of strategy use
+
 ```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
 # Set up packages and upload data.
 rm(list=ls());
@@ -13,81 +27,73 @@ box_auth();
 wustl.box <- TRUE;
 #Packages
 library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
-source("summarySEwithin2.R")
 #Load the dataset
 data_files <- box_ls('278065273295') 
 file_name <- paste0("ECO_ESM_person-level.csv")
 file_id <- box_search(file_name)
-data <- box_read(file_id) %>% as.data.frame()
+ESM <- box_read(file_id) %>% as.data.frame()
+file_name <- paste0("ECO_baseline.csv")
+file_id <- box_search(file_name)
+survey <- box_read(file_id) %>% as.data.frame()
 ```
+
 ## Data Quality Check & Dataset Cleaning
-```{r QC, eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE}
-# A dataset with all the survey scores
-survey <- data %>%
-  distinct(PID, .keep_all=TRUE) %>%
-  select(PID,Group,perceived_stress_sum,CES_D_sum,dweck.sum,sd.cogflu.uc)
-# Exclude those who do not have PSS data. 
+```{r QC, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
+# Found participants with no PSS score
 missing_PSS <- survey %>%
-  filter(is.na(perceived_stress_sum)|is.na(CES_D_sum)|is.na(dweck.sum)|is.na(sd.cogflu.uc))%>%
+  filter(is.na(perceived_stress_sum))%>%
   select(PID)
-survey_clean <- survey[complete.cases(survey$perceived_stress_sum, survey$CES_D_sum, 
-                                      survey$dweck.sum, survey$sd.cogflu.uc), ]
-# Check general ESM completion rate
-ESM_completion_rate <- data %>%
-  group_by(PID) %>%
-  summarise(
-    total_surveys = n(),
-    completed_surveys = sum(completed),
-    completion_rate = completed_surveys / total_surveys
-  )
 #Frequency of influencing their emotions
-emotions_influence_summary <- data %>%
+emotions_influence_summary <- ESM %>%
   group_by(PID) %>%
   summarize(yes_count = sum(esm_influence_emo == 1, na.rm = TRUE),
             yes_percentage = yes_count/63)
-strategy_use_summary <- data %>%
-  group_by(PID) %>%
-  summarize(n_distr = sum(esm_howinfluence == 10 | er_othermethods_distraction == 1, na.rm = TRUE),
-            n_min = sum(esm_howinfluence == 12 | er_othermethods_minimize == 1, na.rm = TRUE), 
-            n_reap = sum(esm_howinfluence == 11 | er_othermethods_posreapp == 1, na.rm = TRUE),
-            n_total_strategy_selection = sum(esm_howinfluence >= 1 & esm_howinfluence <= 15 | 
-                                             er_othermethods_bxactivation == 1 | 
-                                             er_othermethods_reminisce == 1 |
-                                             er_othermethods_change == 1 | 
-                                             er_othermethods_accept == 1 | 
-                                             er_othermethods_savoring == 1 | 
-                                             er_othermethods_rumination == 1 | 
-                                             er_othermethods_capitalize == 1 | 
-                                             er_othermethods_socsharing == 1 |
-                                             er_othermethods_distraction == 1 | 
-                                             er_othermethods_posreapp == 1 |
-                                             er_othermethods_minimize == 1 |
-                                             er_othermethods_coreapp == 1 |
-                                             er_othermethods_suppress == 1 |
-                                             er_othermethods_masking == 1,na.rm = TRUE),
-            perc_distr = n_distr/n_total_strategy_selection,
-            perc_min = n_min/n_total_strategy_selection,
-            perc_reap = n_reap/n_total_strategy_selection) %>%
-    mutate(
-    distr_reap = perc_distr-perc_reap,
-    distr_min = perc_distr-perc_min,
-    min_reap = perc_min-perc_reap
-  )
-#Checking which one did not use any strategy
-missing_ESM <- strategy_use_summary$PID[strategy_use_summary$n_total_strategy_selection==0]
-strategy_use_summary_clean<-strategy_use_summary[strategy_use_summary$PID !=1218, ]
-#Combine survey and ESM together
-data_all <- merge(survey_clean, strategy_use_summary_clean, by = "PID", all = FALSE)
+hist(emotions_influence_summary$yes_percentage, breaks = 20, border = "black",main = "ESM ER Percentage", xlab = "Percentage of time selecting YES for influencing emotions", ylab = "# of Participants")
+#Given that many participants also indicated that they did try to influence their emotions despite answering "no" to emotion regulation since the last survey, we decided to include those who indicated that the most recent time that they influence their emotions were 0-1.5 hours before the prompt, if it wasn't captured by the last survey. Since each interval is 2 hours, 0-1.5 should be able to capture the ER between two prompts.
+
+data <- ESM %>%
+  mutate (Group = factor(Group, levels = 0:2, labels = c("YA","CN","MCI"))) %>%
+  group_by(PID, Group, sd.cogflu.uc, perceived_stress_sum, CES_D_sum,dweck.sum) %>%
+  summarize(n_total_completed = sum(completed==1), 
+            n_total_ER = sum(completed==1 & esm_time_manage %in% 1:4),
+            perc_ER = n_total_ER/n_total_completed,
+            n_distr = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 10 | er_othermethods_distraction == 1), na.rm = TRUE),
+            n_min = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 12 | er_othermethods_minimize == 1), na.rm = TRUE), 
+            n_reap = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 11 | er_othermethods_posreapp == 1), na.rm = TRUE),
+            perc_distr = n_distr/n_total_ER,
+            perc_min = n_min/n_total_ER,
+            perc_reap = n_reap/n_total_ER,
+            stress_mean = mean(esm_stressed,na.rm=TRUE))
+#Check internal consistency
+CESD <- select(survey,CES_D_1:CES_D_20)
+omega(CESD) #alpha=0.93, omega=0.95
+PSS <- select(survey,c(perceived_stress_1:perceived_stress_3,perceived_stress_4r,perceived_stress_5r,perceived_stress_6,perceived_stress_7r, perceived_stress_8r,perceived_stress_9,perceived_stress_10))
+omega(PSS) #alpha=0.89, omega=0.9
+belief <- select(survey,Emotion_Beliefs_1r,Emotion_Beliefs_2,Emotion_Beliefs_3, Emotion_Beliefs_4r)
+omega(belief) #alpha=0.75, omega = 0.79
 ```
-`r unique(data$PID[is.na(data$perceived_stress_mean) | is.na(data$CES_D_sum) | is.na(data$dweck.sum) | is.na(data$sd.cogflu.uc)])` are excluded from the analysis due to not completing Perceived Stress Scale, CESD, implicit beliefs about emotions scale, or NIH toolbox. `r strategy_use_summary$PID[strategy_use_summary$n_total_strategy_selection==0]` is excluded from the analysis due to not selecting any strategy to change their emotion.
-The range of daily survey completion rate is from `r min(ESM_completion_rate$completion_rate)` to `r max(ESM_completion_rate$completion_rate)`. 
-The average completion rate is `r mean(ESM_completion_rate$completion_rate)` with a standard deviation of `r sd(ESM_completion_rate$completion_rate)`.
-It seems that although a lot participants never selected that they did anything to influence their emotions, they still selected strategies to manage their emotions.
+
+## Data distribution
+```{r distribution,eval=TRUE, echo=TRUE, warning=FALSE, message=TRUE}
+layout(matrix(1:12, 3,4, byrow=TRUE)); 
+par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
+#Check distribution of all data; loop through histogram
+variables <- c("perceived_stress_sum","CES_D_sum", "dweck.sum","sd.cogflu.uc","n_total_completed","n_total_ER", "perc_ER","perc_distr","perc_min","perc_reap","stress_mean")
+for (vid in 1:length(variables)) { #vid<-1
+  hist(data[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Participants")
+}
+# boxplot to check the relationship between cognitive fluid score and cognitive impairment
+boxplot(data$sd.cogflu.uc~data$Group, main="cognitive fluid score by cognitive impairment group", xlab= "Group", ylab="Score", 
+        col = c("lightblue", "lightgreen", "lightcoral"),
+        border = "black",
+        notch = TRUE,
+        varwidth = TRUE)
+```
 
 ## Demographics
 ```{r Demo, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
 #Demo table
-demo.sum <- data %>% distinct(PID, .keep_all=TRUE) %>%
+demo.sum <- ESM %>% distinct(PID, .keep_all=TRUE) %>%
   select(PID, Group, Race2_1, Race2_2, Race2_3, Race2_4, Race2_5, Race2_6, Race2_7, 
          Gender, Age)
 #Group, 0=young adult, 1=CN older adults, 2=MCI older adult
@@ -131,50 +137,17 @@ demo.sum %>%
 ## Descriptive Statistics
 ```{r descriptivestats, echo=TRUE, eval=TRUE, warning=F, message=F}
 #Summarizing means, SD, SE, and Ranges for all variables involved. Graph the distribution if needed. 
-#Frequency of influencing their emotions
-hist(emotions_influence_summary$yes_percentage, breaks = 20, border = "black", 
-     main = "Distribution of Yes Responses for Influencing Emotions", 
-     xlab = "Percentage of Yes Responses", ylab = "Number of Participants") 
-#The overall indication of influencing their emotions is low. 
-#However, most participants still answered strategy selection. 
 #Centering
-data_all <- data_all %>% 
+data <- data %>% 
   mutate( 
     PSS_gmc = scale(perceived_stress_sum, center = T, scale = F),
     CESD_gmc = scale(CES_D_sum, center = T, scale = F),
     IBES_gmc = scale(dweck.sum, center = T, scale = F),
     NIHCB_gmc = scale(sd.cogflu.uc, center = T, scale = F))
 #OVerall stats
-describe(data_all[c("perc_distr","perc_min","perc_reap","distr_reap",
-                    "distr_min","min_reap","perceived_stress_sum",
-                    "CES_D_sum","dweck.sum","sd.cogflu.uc","PSS_gmc", 
+describe(data[c(variables, "PSS_gmc", 
                     "CESD_gmc", "IBES_gmc", "NIHCB_gmc")])
-#Frequency of distr use
-hist(data_all$perc_distr, breaks = 20, border = "black", 
-     main = "Distribution of Distraction Use", 
-     xlab = "Percentage of Distraction Use", 
-     ylab = "Number of Participants")
-#Frequency of min use
-hist(data_all$perc_min, breaks = 20, border = "black", 
-     main = "Distribution of Minimizing Use", 
-     xlab = "Percentage of Minimizing Use", 
-     ylab = "Number of Participants")
-#Frequency of reap use
-hist(data_all$perc_reap, breaks = 20, border = "black", 
-     main = "Distribution of Reappraisal Use", 
-     xlab = "Percentage of Reappraisal Use", 
-     ylab = "Number of Participants")
-hist(data_all$distr_reap, breaks = 20, border = "black")
-hist(data_all$distr_min, breaks = 20, border = "black")
-hist(data_all$min_reap, breaks = 20, border = "black")
-#PSS
-hist(data_all$perceived_stress_sum, breaks = 20, border = "black")
-#CES-D
-hist(data_all$CES_D_sum, breaks = 20, border = "black")
-#IBES
-hist(data_all$CES_D_sum, breaks = 20, border = "black")
-#NIHTB-CB
-hist(data_all$sd.cogflu.uc, breaks = 20, border = "black")
+
 ```
 ##Correlation
 
