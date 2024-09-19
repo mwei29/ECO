@@ -128,18 +128,24 @@ for (pid in unique(ESM_test$PID)) {
   ESM_test[ESM_test$PID == pid, "ER_yes"] <- subset_data$ER_yes
 }
 #Create strategy selection variables
-ESM_test$distr_yes <- ifelse(ESM_test$ER_yes == 1 & 
-                             (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 10 | 
-                              !is.na(ESM_test$er_othermethods_distraction) & ESM_test$er_othermethods_distraction == 1), 
-                             1, 0)
-ESM_test$min_yes <- ifelse(ESM_test$ER_yes == 1 & 
-                           (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 12 | 
-                            !is.na(ESM_test$er_othermethods_minimize) & ESM_test$er_othermethods_minimize == 1), 
-                           1, 0)
-ESM_test$reap_yes <- ifelse(ESM_test$ER_yes == 1 & 
+ESM_test$distr_yes <- ifelse(is.na(ESM_test$ER_yes) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_distraction)), 
+                             NA, 
+                             ifelse(
+                               ESM_test$ER_yes == 1 & (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 10 | 
+                                                         !is.na(ESM_test$er_othermethods_distraction) & ESM_test$er_othermethods_distraction == 1), 
+                               1, 0))
+ESM_test$min_yes <- ifelse(is.na(ESM_test$ER_yes) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_minimize)), 
+                           NA, 
+                           ifelse(ESM_test$ER_yes == 1 & 
+                                    (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 12 | 
+                                       !is.na(ESM_test$er_othermethods_minimize) & ESM_test$er_othermethods_minimize == 1), 
+                                  1, 0))
+ESM_test$reap_yes <- ifelse(is.na(ESM_test$ER_yes) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_posreapp)), 
+                             NA, 
+                            ifelse(ESM_test$ER_yes == 1 & 
                             (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 11 | 
                              !is.na(ESM_test$er_othermethods_posreapp) & ESM_test$er_othermethods_posreapp == 1), 
-                            1, 0)
+                            1, 0))
 ESM_clean <- ESM_test[, c("PID", "Group", "completed", "esm_stressed",  "ER_yes", "distr_yes", "min_yes", "reap_yes", "sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
 ESM_clean <-ESM_clean %>%
   group_by(PID) %>%
@@ -162,11 +168,12 @@ data_b <- ESM_clean%>%
             n_distr = sum(distr_yes, na.rm = TRUE),
             n_min = sum(min_yes, na.rm = TRUE), 
             n_reap = sum(reap_yes, na.rm = TRUE),
-            perc_distr = n_distr/n_total_ER,
-            perc_min = n_min/n_total_ER,
-            perc_reap = n_reap/n_total_ER) %>%
+            perc_distr =ifelse(n_total_ER > 0, n_distr / n_total_ER, 0),
+            perc_min = ifelse(n_total_ER > 0, n_min / n_total_ER, 0),
+            perc_reap = ifelse(n_total_ER > 0, n_reap / n_total_ER, 0)) %>%
   ungroup() %>%
   as.data.frame()
+view(data_b)
 ```
 
 ### Check internal consistency
@@ -197,7 +204,8 @@ boxplot(data_b$sd.cogflu.uc~data_b$Group, main="cognitive fluid score by cogniti
         notch = TRUE,
         varwidth = TRUE)
 #OVerall stats including centered variables
-describe(data_b[c(variables, "PSS_gmc", "CESD_gmc", "IBES_gmc", "NIHCB_gmc","stress_gmc")])
+describe(data_b[variables])
+describe(ESM_clean[c("completed", "esm_stressed","ER_yes","distr_yes","min_yes","reap_yes")])
 ```
 
 ## Demographics
@@ -249,7 +257,17 @@ demo.sum %>%
 library(lmerTest)
 library(performance)
 fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = ESM_clean, family = binomial(link = "logit"))
-model_performance(fit_logit)
+model_performance(fit_logit) 
+#ICC = .463
+fit_logit <- glmer(distr_yes ~ 1 + (1 | PID), data = ESM_clean, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.464
+fit_logit <- glmer(min_yes ~ 1 + (1 | PID), data = ESM_clean, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.435
+fit_logit <- glmer(reap_yes ~ 1 + (1 | PID), data = ESM_clean, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.48
 ```
 
 
