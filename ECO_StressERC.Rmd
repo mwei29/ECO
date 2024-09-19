@@ -19,7 +19,7 @@ Outcome variables:
 1. Whether participant chose to influence their emotions; 
 2. the frequency of strategy use
 
-```{r setup, echo=FALSE, warning=FALSE, message=FALSE}
+```{r setup, echo=FALSE, cache=TRUE, warning=FALSE, message=FALSE}
 # Set up packages and upload data.
 rm(list=ls());
 library(boxr);   
@@ -28,7 +28,7 @@ wustl.box <- TRUE;
 #Packages
 library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
 #Load the dataset
-data_files <- box_ls('278065273295') 
+#data_files <- box_ls('278065273295') 
 file_name <- paste0("ECO_ESM_person-level.csv")
 file_id <- box_search(file_name)
 ESM <- box_read(file_id) %>% as.data.frame()
@@ -37,8 +37,11 @@ file_id <- box_search(file_name)
 survey <- box_read(file_id) %>% as.data.frame()
 ```
 
-## Data Quality Check & Dataset Cleaning
-```{r QC, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
+## Data Quality Check
+
+### Dataset Cleaning
+Given that many participants also indicated that they did try to influence their emotions despite answering "no" to emotion regulation since the last survey, we decided to include those who indicated that the most recent time that they influence their emotions were 0-1.5 hours before the prompt, if it wasn't captured by the last survey. Since each interval is 2 hours, 0-1.5 should be able to capture the ER between two prompts.
+```{r QC, eval=TRUE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
 # Found participants with no PSS score
 missing_PSS <- survey %>%
   filter(is.na(perceived_stress_sum))%>%
@@ -51,19 +54,123 @@ emotions_influence_summary <- ESM %>%
 hist(emotions_influence_summary$yes_percentage, breaks = 20, border = "black",main = "ESM ER Percentage", xlab = "Percentage of time selecting YES for influencing emotions", ylab = "# of Participants")
 #Given that many participants also indicated that they did try to influence their emotions despite answering "no" to emotion regulation since the last survey, we decided to include those who indicated that the most recent time that they influence their emotions were 0-1.5 hours before the prompt, if it wasn't captured by the last survey. Since each interval is 2 hours, 0-1.5 should be able to capture the ER between two prompts.
 
-data <- ESM %>%
-  mutate (Group = factor(Group, levels = 0:2, labels = c("YA","CN","MCI"))) %>%
-  group_by(PID, Group, sd.cogflu.uc, perceived_stress_sum, CES_D_sum,dweck.sum) %>%
-  summarize(n_total_completed = sum(completed==1), 
-            n_total_ER = sum(completed==1 & esm_time_manage %in% 1:4),
+# Clean up the full dataset for within person
+ESM_test <- ESM
+ESM_test$day <- (ESM_test$Prompt - 1) %/% 7 + 1
+# Determine the day of survey
+ESM_test$ER_yes <- NA  # Set NA as default for non-completed surveys
+# Loop through each PID
+for (pid in unique(ESM_test$PID)) {
+  # Subset data for the current PID
+  subset_data <- ESM_test[ESM_test$PID == pid, ]
+  # Initialize variables to track the last completed survey
+  last_completed_time <- NULL
+  last_completed_day <- NULL
+  # Loop through each row for the current PID
+  for (i in 1:nrow(subset_data)) {
+    # Check if survey is completed
+    if (subset_data$completed[i] == 1) {
+      # Check if Start_time is missing (NA)
+      if (is.na(subset_data$Start_time[i])) {
+        subset_data$ER_yes[i] <- NA  # Assign ER_yes = 0 if Start_time is missing
+        next  # Skip to the next row
+      }
+      # Get current day and time
+      current_day <- subset_data$day[i]
+      current_time <- as.POSIXct(subset_data$Start_time[i], format = "%H:%M:%S")
+      # If it's the first completed survey
+      if (is.null(last_completed_time)) {
+        if (!is.na(subset_data$esm_influence_emo[i]) && subset_data$esm_influence_emo[i] == 1 || 
+            (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] %in% 1:4)) {
+          subset_data$ER_yes[i] <- 1
+        } else {
+          subset_data$ER_yes[i] <- 0
+        }
+        # Update last completed survey info
+        last_completed_time <- current_time
+        last_completed_day <- current_day
+      # If it's not the first completed survey
+      } else {
+        # Check if it's a new day
+        if (current_day != last_completed_day) {
+          if (!is.na(subset_data$esm_influence_emo[i]) && subset_data$esm_influence_emo[i] == 1 || 
+              (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] %in% 1:4)) {
+            subset_data$ER_yes[i] <- 1
+          } else {
+            subset_data$ER_yes[i] <- 0
+          }
+        } else {
+          # Calculate time gap in minutes
+          time_gap <- as.numeric(difftime(current_time, last_completed_time, units = "mins"))
+          # Check based on time gap and esm_time_manage
+          if (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] == 1) {
+            subset_data$ER_yes[i] <- 1
+          } else if (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] == 2 && time_gap >= 30) {
+            subset_data$ER_yes[i] <- 1
+          } else if (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] == 3 && time_gap >= 60) {
+            subset_data$ER_yes[i] <- 1
+          } else if (!is.na(subset_data$esm_time_manage[i]) && subset_data$esm_time_manage[i] == 4 && time_gap >= 90) {
+            subset_data$ER_yes[i] <- 1
+          } else {
+            subset_data$ER_yes[i] <- 0
+          }
+        }
+        # Update last completed time and day
+        last_completed_time <- current_time
+        last_completed_day <- current_day
+      }
+    } else {
+      # If not completed, assign NA
+      subset_data$ER_yes[i] <- NA
+    }
+  }
+  # Update the main dataset with the new ER_yes
+  ESM_test[ESM_test$PID == pid, "ER_yes"] <- subset_data$ER_yes
+}
+#Create strategy selection variables
+ESM_test$distr_yes <- ifelse(ESM_test$ER_yes == 1 & 
+                             (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 10 | 
+                              !is.na(ESM_test$er_othermethods_distraction) & ESM_test$er_othermethods_distraction == 1), 
+                             1, 0)
+ESM_test$min_yes <- ifelse(ESM_test$ER_yes == 1 & 
+                           (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 12 | 
+                            !is.na(ESM_test$er_othermethods_minimize) & ESM_test$er_othermethods_minimize == 1), 
+                           1, 0)
+ESM_test$reap_yes <- ifelse(ESM_test$ER_yes == 1 & 
+                            (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 11 | 
+                             !is.na(ESM_test$er_othermethods_posreapp) & ESM_test$er_othermethods_posreapp == 1), 
+                            1, 0)
+ESM_clean <- ESM_test[, c("PID", "Group", "completed", "esm_stressed",  "ER_yes", "distr_yes", "min_yes", "reap_yes", "sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
+ESM_clean <-ESM_clean %>%
+  group_by(PID) %>%
+  mutate (Group = factor(Group, levels = 0:2, labels = c("YA","CN","MCI")),
+          stress_mean = mean(esm_stressed,na.rm=TRUE)) %>%
+  ungroup() %>%
+  mutate(PSS_gmc = scale(perceived_stress_sum, center = T, scale = F),
+         CESD_gmc = scale(CES_D_sum, center = T, scale = F),
+         IBES_gmc = scale(dweck.sum, center = T, scale = F),
+         NIHCB_gmc = scale(sd.cogflu.uc, center = T, scale = F),
+         stress_gmc = scale(stress_mean, center = T, scale = F)) %>%
+  as.data.frame()
+          
+#between person
+data_b <- ESM_clean%>%
+  group_by(PID, Group, sd.cogflu.uc, perceived_stress_sum, CES_D_sum,dweck.sum,stress_mean,PSS_gmc,CESD_gmc,IBES_gmc,NIHCB_gmc,stress_gmc) %>%
+  summarize(n_total_completed = sum(completed==1,na.rm = TRUE), 
+            n_total_ER = sum(ER_yes,na.rm = TRUE),
             perc_ER = n_total_ER/n_total_completed,
-            n_distr = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 10 | er_othermethods_distraction == 1), na.rm = TRUE),
-            n_min = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 12 | er_othermethods_minimize == 1), na.rm = TRUE), 
-            n_reap = sum(esm_time_manage %in% 1:4 & (esm_howinfluence == 11 | er_othermethods_posreapp == 1), na.rm = TRUE),
+            n_distr = sum(distr_yes, na.rm = TRUE),
+            n_min = sum(min_yes, na.rm = TRUE), 
+            n_reap = sum(reap_yes, na.rm = TRUE),
             perc_distr = n_distr/n_total_ER,
             perc_min = n_min/n_total_ER,
-            perc_reap = n_reap/n_total_ER,
-            stress_mean = mean(esm_stressed,na.rm=TRUE))
+            perc_reap = n_reap/n_total_ER) %>%
+  ungroup() %>%
+  as.data.frame()
+```
+
+### Check internal consistency
+```{r Internal consistency, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
 #Check internal consistency
 CESD <- select(survey,CES_D_1:CES_D_20)
 omega(CESD) #alpha=0.93, omega=0.95
@@ -73,21 +180,24 @@ belief <- select(survey,Emotion_Beliefs_1r,Emotion_Beliefs_2,Emotion_Beliefs_3, 
 omega(belief) #alpha=0.75, omega = 0.79
 ```
 
-## Data distribution
+### Data distribution and Descriptive Stats
 ```{r distribution,eval=TRUE, echo=TRUE, warning=FALSE, message=TRUE}
 layout(matrix(1:12, 3,4, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
 variables <- c("perceived_stress_sum","CES_D_sum", "dweck.sum","sd.cogflu.uc","n_total_completed","n_total_ER", "perc_ER","perc_distr","perc_min","perc_reap","stress_mean")
 for (vid in 1:length(variables)) { #vid<-1
-  hist(data[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Participants")
+  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Participants")
 }
+par(mfrow = c(1, 1))
 # boxplot to check the relationship between cognitive fluid score and cognitive impairment
-boxplot(data$sd.cogflu.uc~data$Group, main="cognitive fluid score by cognitive impairment group", xlab= "Group", ylab="Score", 
+boxplot(data_b$sd.cogflu.uc~data_b$Group, main="cognitive fluid score by cognitive impairment group", xlab= "Group", ylab="Score", 
         col = c("lightblue", "lightgreen", "lightcoral"),
         border = "black",
         notch = TRUE,
         varwidth = TRUE)
+#OVerall stats including centered variables
+describe(data_b[c(variables, "PSS_gmc", "CESD_gmc", "IBES_gmc", "NIHCB_gmc","stress_gmc")])
 ```
 
 ## Demographics
@@ -134,24 +244,18 @@ demo.sum %>%
   count(Gender)
 ```
 
-## Descriptive Statistics
-```{r descriptivestats, echo=TRUE, eval=TRUE, warning=F, message=F}
-#Summarizing means, SD, SE, and Ranges for all variables involved. Graph the distribution if needed. 
-#Centering
-data <- data %>% 
-  mutate( 
-    PSS_gmc = scale(perceived_stress_sum, center = T, scale = F),
-    CESD_gmc = scale(CES_D_sum, center = T, scale = F),
-    IBES_gmc = scale(dweck.sum, center = T, scale = F),
-    NIHCB_gmc = scale(sd.cogflu.uc, center = T, scale = F))
-#OVerall stats
-describe(data[c(variables, "PSS_gmc", 
-                    "CESD_gmc", "IBES_gmc", "NIHCB_gmc")])
-
+### intraclass correlations of EMA items
+```{r EMA cor, echo=TRUE,eval=TRUE,warning=F, message=F}
+library(lmerTest)
+library(performance)
+fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = ESM_clean, family = binomial(link = "logit"))
+model_performance(fit_logit)
 ```
-##Correlation
 
+
+###Correlation
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, message=F}
-correlation_results <- corr.test(data_all[, c("distr_reap","distr_min","min_reap","perceived_stress_sum","CES_D_sum","dweck.sum","sd.cogflu.uc")])
+correlation_results <- corr.test(data_b[c("perc_ER","perc_distr","perc_min","perc_reap","PSS_gmc","CESD_gmc","IBES_gmc")])
 correlation_results
+
 ```
