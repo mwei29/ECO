@@ -19,8 +19,8 @@ Outcome variables:
 1. Whether participant chose to influence their emotions; 
 2. the frequency of strategy use
 
-```{r setup, echo=FALSE, cache=TRUE, warning=FALSE, message=FALSE}
-# Set up packages and upload data.
+```{r setup, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+# Set up packages and upload data. 
 rm(list=ls());
 library(boxr);   
 box_auth(); 
@@ -40,8 +40,8 @@ survey <- box_read(file_id) %>% as.data.frame()
 ## Data Quality Check
 
 ### Dataset Cleaning
-Given that many participants also indicated that they did try to influence their emotions despite answering "no" to emotion regulation since the last survey, we decided to include those who indicated that the most recent time that they influence their emotions were 0-1.5 hours before the prompt, if it wasn't captured by the last survey. Since each interval is 2 hours, 0-1.5 should be able to capture the ER between two prompts.
-```{r QC, eval=TRUE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
+Given that many participants also indicated that they did try to influence their emotions despite answering "no" to emotion regulation since the last survey, we decided to include those who indicated that the most recent time that they influence their emotions were 0-1.5 hours before the prompt, if it wasn't captured by the last survey. Since each interval is 2 hours, 0-1.5 should be able to capture the ER between two prompts. I also made three different variables capturing just "at the prompt" to make within-person analysis more accurate. 
+```{r dataset, eval=FALSE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
 # Found participants with no PSS score
 missing_PSS <- survey %>%
   filter(is.na(perceived_stress_sum))%>%
@@ -146,11 +146,55 @@ ESM_test$reap_yes <- ifelse(is.na(ESM_test$ER_yes) | (is.na(ESM_test$esm_howinfl
                             (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 11 | 
                              !is.na(ESM_test$er_othermethods_posreapp) & ESM_test$er_othermethods_posreapp == 1), 
                             1, 0))
-ESM_clean <- ESM_test[, c("PID", "Group", "completed", "esm_stressed",  "ER_yes", "distr_yes", "min_yes", "reap_yes", "sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
-ESM_clean <-ESM_clean %>%
+#Create a new strategy selection that only includes "at the time of the prompt" for more accurate within person response
+ESM_test$distr_yes_prompt <- ifelse(is.na(ESM_test$esm_time_manage) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_distraction)), 
+                             NA, 
+                             ifelse(
+                               ESM_test$esm_time_manage == 1 & (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 10 | 
+                                                         !is.na(ESM_test$er_othermethods_distraction) & ESM_test$er_othermethods_distraction == 1), 
+                               1, 0))
+ESM_test$min_yes_prompt <- ifelse(is.na(ESM_test$esm_time_manage) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_minimize)), 
+                           NA, 
+                           ifelse(ESM_test$esm_time_manage == 1 & 
+                                    (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 12 | 
+                                       !is.na(ESM_test$er_othermethods_minimize) & ESM_test$er_othermethods_minimize == 1), 
+                                  1, 0))
+ESM_test$reap_yes_prompt <- ifelse(is.na(ESM_test$esm_time_manage) | (is.na(ESM_test$esm_howinfluence) & is.na(ESM_test$er_othermethods_posreapp)), 
+                             NA, 
+                            ifelse(ESM_test$esm_time_manage == 1 & 
+                            (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 11 | 
+                             !is.na(ESM_test$er_othermethods_posreapp) & ESM_test$er_othermethods_posreapp == 1), 
+                            1, 0))
+ESM_clean <- ESM_test[, c("PID", "Group", "completed", "esm_time_manage","esm_stressed",  "ER_yes", "distr_yes", "min_yes", "reap_yes", "distr_yes_prompt", "min_yes_prompt","reap_yes_prompt","sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
+write.csv(ESM_clean, "C:/Users/Emotion/Documents/GIT-MW/ECO/ESM_clean.csv")
+```
+
+```{r center, eval=FALSE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
+# Set up packages and upload data. 
+rm(list=ls());
+options(warnPartialMatchDollar=TRUE);   # safety option
+library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
+# Read in dataset
+ESM_clean<-read.csv("ESM_clean.csv")
+data <-ESM_clean %>%
   group_by(PID) %>%
   mutate (Group = factor(Group, levels = 0:2, labels = c("YA","CN","MCI")),
-          stress_mean = mean(esm_stressed,na.rm=TRUE)) %>%
+          stress_pm = mean(esm_stressed,na.rm=TRUE),
+          ER_yes_pm = sum(ER_yes,na.rm = TRUE)/ sum(completed==1,na.rm = TRUE),
+          distr_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(distr_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
+          min_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(min_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
+          reap_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(reap_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
+          ER_yes_prompt_pm = sum(esm_time_manage==1,na.rm = TRUE)/sum(completed==1,na.rm = TRUE),
+          distr_prompt_pm = ifelse(sum(esm_time_manage==1,na.rm = TRUE) > 0, sum(distr_yes_prompt,na.rm = TRUE) / sum(esm_time_manage==1,na.rm = TRUE), 0),
+          min_prompt_pm = ifelse(sum(esm_time_manage==1,na.rm = TRUE) > 0, sum(min_yes_prompt,na.rm = TRUE) / sum(esm_time_manage==1,na.rm = TRUE), 0),
+          reap_prompt_pm = ifelse(sum(esm_time_manage==1,na.rm = TRUE) > 0, sum(reap_yes_prompt,na.rm = TRUE) / sum(esm_time_manage==1,na.rm = TRUE), 0)) %>% 
+  ungroup()%>%
+  mutate(
+    stress_gmc = scale(esm_stressed, center = T, scale = F),
+    stress_w = 
+      stress_b = 
+   )
+  )
   ungroup() %>%
   mutate(PSS_gmc = scale(perceived_stress_sum, center = T, scale = F),
          CESD_gmc = scale(CES_D_sum, center = T, scale = F),
