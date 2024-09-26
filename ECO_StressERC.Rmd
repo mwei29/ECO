@@ -338,7 +338,7 @@ model_performance(fit0)
 ## Between-Person Analysis
 
 ### Correlations
-```{r cor, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
 data$PID<-as.numeric(data$PID)
 data$Group_code <- as.factor(data$Group_code)
 stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","distr_yes_prompt","min_yes_prompt","reap_yes_prompt","sd.cogflu.uc","perceived_stress_sum","CES_D_sum","dweck.sum")),group="PID")
@@ -353,7 +353,7 @@ stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
 ### Association between overall ER use & PSS
 Higher PSS score is associated with higher percentage of ER use and distraction use.
 In the models for main effects, I included moderators to control for their effect. Multicollinearity issue was assessed through VIF, doesn't seem to have a problem here.
-```{r PSS ER, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r PSS ER, echo=TRUE,eval=TRUE,cache=TRUE, warning=F, message=F}
 # stress predicting whether or not ER strategy was selected
 ER <- lm(ER_yes_pm ~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(ER) #higher PSS score is associated with higher percentage of using emotion regulation, effect holds when other variables are controlled for
@@ -376,7 +376,7 @@ vif(reap)
 
 ### Moderation analysis: ER use & PSS
 Malleability belief weakens the association between stress and ER use. 
-```{r PSS ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r PSS ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F,cache=TRUE,  message=F}
 # stress predicting whether or not ER strategy was selected
 # CESD: sd=12.04
 ER <- lm(ER_yes_pm ~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
@@ -409,7 +409,7 @@ summary(ER)
 ```
 
 ### Moderation analysis: strategy preference & PSS
-```{r PSS ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r PSS ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
 # stress predicting ER strategy preference
 # CESD
 #distraction
@@ -488,7 +488,7 @@ grid.arrange(g1, g2, ncol=2)
 
 ### Association between overall ER use & mean stress score in ESM
 Higher ESM stress is associated with higher overall ER use, and all three strategy use. Among the specific strategies, distraction is the most influenced by stress, followed by minimizing and reappraisal.
-```{r ESMstress ER, echo=FALSE,eval=FALSE,warning=F, message=F}
+```{r ESMstress ER, echo=FALSE,eval=FALSE,warning=F, cache=TRUE, message=F}
 # stress predicting whether or not ER strategy was selected
 ER <- lm(ER_yes_pm ~ stress_pm_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(ER) #higher ESM stress is associated with higher percentage of using emotion regulation, effect holds when other variables are controlled for
@@ -509,7 +509,7 @@ summary(reap) #higher PSS score is associated with higher percentage of using re
 ```
 
 ### Moderation analysis: ER use & ESM stress
-```{r ESMstress ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r ESMstress ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F,cache=TRUE,  message=F}
 # stress predicting whether or not overall ER strategy was used
 # CESD
 ER <- lm(ER_yes_pm ~ stress_pm_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
@@ -536,7 +536,7 @@ Depressive symptoms weaken the association between stress and reappraisal use.
 Fluid cognition score weakens the association between stress and all three strategy use (Note, for distraction p=0.08). People with less cognitive resources use distraction a lot more when encountering stress. (the only big increase in strategy selection frequency for people with more cognitive resources is distraction)
 Stress is more positively associated with distraction in CN adults
 Stress is more positively associated with reappraisal use in CN adults. (p=0.07)
-```{r ESMstress ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+```{r ESMstress ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
 # stress predicting ER strategy preference
 # CESD
 #distraction
@@ -663,28 +663,108 @@ g7<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=Group,group=Group)) +
 grid.arrange(g1, g2, g3, g4, g5, g6, g7, ncol=3)
 ```
 
-## Multilevel Modeling - hurdle model
-Given the prevalence of 0 observation for specific strategy use & overall ER use, fit a hurdle model for multilevel modeling
+## Multilevel Modeling
 
 ### Stress predicting overall ER use & each strategy use
-```{r withinER,echo=TRUE,eval=TRUE,warning=F, message=F}
-hurdle_model <- hurdle(ER_yes ~ stress_w + stress_b + PSS_gmc + CESD_gmc + IBES_gmc + NIHCB_gmc + Group, 
-                       data = data,
-                       dist = "poisson")  # Assuming Poisson distribution for the count data
+Higher momentary within-person stress is associated with using more ER.
+Higher between-person stress is associated with using more ER.
+At the time of the prompt, higher momentary within-person stress is associated with more ER.
+```{r withinER,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
+ER <- glmer(ER_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
 
-summary(hurdle_model)
-data
+summary(ER)
+#Just whether ER is use *at the time of the prompt*
+ER <- glmer(ER_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(ER)
 ```
 
 ### Moderation analysis: overall ER use
-```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, message=F}
+Higher momentary within-person stress is associated with using more distraction.
+Higher between-person stress is associated with using more distraction.
+```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
+distr <- glmer(distr_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
 
+summary(distr)
+distr <- glmer(distr_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
 
+summary(distr)
+min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(min)
+min <- glmer(min_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(min)
+reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(reap)
+reap <- glmer(reap_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(reap)
 ```
 
 ### Moderation analysis: specific ER use
 ```{r withinER strategy mod,echo=TRUE,eval=TRUE,warning=F, message=F}
+distr <- glmer(distr_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
 
+summary(distr)
+distr <- glmer(distr_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(distr)
+min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(min)
+min <- glmer(min_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(min)
+reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(reap)
+reap <- glmer(reap_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+                        (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+
+summary(reap)
 
 ```
 
