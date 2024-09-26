@@ -19,12 +19,16 @@ Outcome variables:
 1. Whether participant chose to influence their emotions; 
 2. the frequency of strategy use
 
-```{r setup, echo=FALSE, eval=FALSE, warning=FALSE, message=FALSE}
+```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
 # Set up packages and upload data. 
 rm(list=ls());
-library(boxr);   
-box_auth(); 
-wustl.box <- TRUE;
+options(warnPartialMatchDollar=TRUE);   # safety option
+library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table);library(lmerTest);library(performance);library(car);library(gridExtra);library(glmmTMB)
+# Set up packages and upload data. 
+# rm(list=ls());
+# library(boxr);   
+# box_auth(); 
+# wustl.box <- TRUE;
 #Packages
 # library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
 #Load the dataset
@@ -32,9 +36,9 @@ wustl.box <- TRUE;
 # file_name <- paste0("ECO_ESM_person-level.csv")
 # file_id <- box_search(file_name)
 # ESM <- box_read(file_id) %>% as.data.frame()
-file_name <- paste0("ECO_baseline.csv")
-file_id <- box_search(file_name)
-survey <- box_read(file_id) %>% as.data.frame()
+# file_name <- paste0("ECO_baseline.csv")
+# file_id <- box_search(file_name)
+# survey <- box_read(file_id) %>% as.data.frame()
 ```
 
 ## Data Quality Check
@@ -170,10 +174,6 @@ write.csv(ESM_clean, "C:/Users/Emotion/Documents/GIT-MW/ECO/ESM_clean.csv")
 ```
 
 ```{r center, eval=TRUE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
-# Set up packages and upload data. 
-rm(list=ls());
-options(warnPartialMatchDollar=TRUE);   # safety option
-library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table)
 # Read in dataset
 ESM_clean<-fread("ESM_clean.csv")
 survey <- fread("ECO_baseline.csv")
@@ -196,15 +196,41 @@ data <-ESM_clean %>%
     stress_gmc = scale(esm_stressed, center = T, scale = F),
     stress_w = esm_stressed - stress_pm,
     stress_b = stress_gmc - stress_w,
+    stress_pm_gmc = scale(stress_pm, center = T, scale = F),
     PSS_gmc = scale(perceived_stress_sum, center = T, scale = F),
     CESD_gmc = scale(CES_D_sum, center = T, scale = F),
     IBES_gmc = scale(dweck.sum, center = T, scale = F),
     NIHCB_gmc = scale(sd.cogflu.uc, center = T, scale = F)) %>%
   as.data.frame()
+data_b <- data %>%
+  group_by(PID) %>%
+  summarise(
+    Group = first(Group),  # Assuming all entries of a single group per PID are the same
+    perceived_stress_sum = first(perceived_stress_sum),
+    CES_D_sum = first(CES_D_sum),
+    dweck_sum = first(dweck.sum),
+    sd_cogflu_uc = first(sd.cogflu.uc),
+    stress_pm = first(stress_pm),
+    stress_pm_gmc = first(stress_pm_gmc),
+    ER_yes_pm = first(ER_yes_pm),
+    distr_pm = first(distr_pm),
+    min_pm = first(min_pm),
+    reap_pm = first(reap_pm),
+    ER_yes_prompt_pm = first(ER_yes_prompt_pm),
+    distr_prompt_pm = first(distr_prompt_pm),
+    min_prompt_pm = first(min_prompt_pm),
+    reap_prompt_pm = first(reap_prompt_pm),
+    PSS_gmc = first(PSS_gmc),
+    CESD_gmc = first(CESD_gmc),
+    IBES_gmc = first(IBES_gmc),
+    NIHCB_gmc = first(NIHCB_gmc)
+  ) %>%
+  ungroup() %>%
+  as.data.frame()
 ```
 
 ### Check internal consistency
-```{r Internal consistency, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
+```{r Internal consistency, eval=TRUE, echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
 #Check internal consistency
 CESD <- select(survey,CES_D_1:CES_D_20)
 omega(CESD) #alpha=0.93, omega=0.95
@@ -215,28 +241,27 @@ omega(belief) #alpha=0.75, omega = 0.79
 ```
 
 ### Data distribution and Descriptive Stats
-```{r distribution,eval=TRUE, echo=TRUE, warning=FALSE, message=TRUE}
+```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=TRUE,warning=FALSE, message=TRUE}
 layout(matrix(1:15, 3,5, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
-variables <- c("perceived_stress_sum","CES_D_sum", "dweck.sum","sd.cogflu.uc","stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm","ER_yes_prompt_pm","distr_prompt_pm","min_prompt_pm","reap_prompt_pm")
-for (vid in 1:length(variables)) { #vid<-1
-  hist(data[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Prompts")
+variables <- c("perceived_stress_sum","CES_D_sum", "dweck_sum","sd_cogflu_uc","stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm","ER_yes_prompt_pm","distr_prompt_pm","min_prompt_pm","reap_prompt_pm")
+for (vid in 1:length(variables)) { #vid<-3
+  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Prompts")
 }
-par(mfrow = c(1, 1))
 # boxplot to check the relationship between cognitive fluid score and cognitive impairment
-boxplot(data$sd.cogflu.uc~data$Group, main="cognitive fluid score by cognitive impairment group", xlab= "Group", ylab="Score", 
+boxplot(data_b$sd_cogflu_uc~data_b$Group, main="NIHCB score by MCI group", xlab= "Group", ylab="Score", 
         col = c("lightblue", "lightgreen", "lightcoral"),
         border = "black",
         notch = TRUE,
         varwidth = TRUE)
+par(mfrow = c(1, 1))
 #OVerall stats including centered variables
-describe(data[variables])
-describe(data[c("stress_gmc","stress_w","stress_b","PSS_gmc","CESD_gmc","IBES_gmc","NIHCB_gmc")])
+describe(data_b)
 ```
 
 ### Demographics
-```{r Demo, eval=TRUE, echo=TRUE, warning=FALSE, message=FALSE}
+```{r Demo, eval=TRUE, echo=TRUE,cache=TRUE, warning=FALSE, message=FALSE}
 #Demo table
 demo.sum <- data %>% distinct(PID, .keep_all=TRUE) %>%
   select(PID, Group, Race2_1, Race2_2, Race2_3, Race2_4, Race2_5, Race2_6, Race2_7, 
@@ -279,9 +304,7 @@ demo.sum %>%
 ```
 
 ### intraclass correlations of EMA items
-```{r EMA cor, echo=TRUE,eval=TRUE,warning=F, message=F}
-library(lmerTest)
-library(performance)
+```{r EMA cor, echo=TRUE,eval=TRUE,cache=TRUE,warning=F, message=F}
 fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
 model_performance(fit_logit) 
 #ICC = .463,54% variance is within person
@@ -311,12 +334,14 @@ model_performance(fit0)
 #ICC = 0.408, 59% variance is within person
 ```
 
-##Analysis
 
-###Correlation
+## Between-Person Analysis
+
+### Correlations
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, message=F}
 data$PID<-as.numeric(data$PID)
-stats<-statsBy(select(data,c("PID","Group_code","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","distr_yes_prompt","min_yes_prompt","reap_yes_prompt","sd.cogflu.uc","perceived_stress_sum","CES_D_sum","dweck.sum")),group="PID")
+data$Group_code <- as.factor(data$Group_code)
+stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","distr_yes_prompt","min_yes_prompt","reap_yes_prompt","sd.cogflu.uc","perceived_stress_sum","CES_D_sum","dweck.sum")),group="PID")
 #between person correlations
 stats$rbg #Between-Person Correlation for Raw Scores
 stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
@@ -325,53 +350,43 @@ stats$rwg #Within-Person Correlation for Raw Scores
 stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
 ```
 
-### Association with PSS
-```{r PSS, echo=TRUE,eval=TRUE,warning=F, message=F}
+### Association between overall ER use & PSS
+Higher PSS score is associated with higher percentage of ER use and distraction use.
+In the models for main effects, I included moderators to control for their effect. Multicollinearity issue was assessed through VIF, doesn't seem to have a problem here.
+```{r PSS ER, echo=TRUE,eval=TRUE,warning=F, message=F}
 # stress predicting whether or not ER strategy was selected
-library(car)
-ER <- lm(ER_yes_pm ~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
+ER <- lm(ER_yes_pm ~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(ER) #higher PSS score is associated with higher percentage of using emotion regulation, effect holds when other variables are controlled for
 vif(ER)
 # stress predicting ER strategy preference
 #distraction
-distr <- lm(distr_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
+distr <- lm(distr_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(distr) #higher PSS score is associated with higher percentage of using distraction, effect holds when other variables are controlled for
-# b = 0.0063495  
+# b = 0.005994     
 vif(distr)
 #minimizing
-min <- lm(min_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(min) #higher PSS score is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
-# b = 0.0026587  
+min <- lm(min_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min) #N.S.  
 vif(min)
 #reappraisal
-reap <- lm(reap_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(reap) #higher PSS score is associated with higher percentage of using reappraisal, effect holds when other variables are controlled for
-# b = 0.0034515  
+reap <- lm(reap_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(reap) #N.S.
 vif(reap)
 ```
 
-### Moderation analysis
-```{r PSS mod, echo=TRUE,eval=TRUE,warning=F, message=F}
-# stress predicting whether or not ER strategy was selected, CESD
-ER <- lm(ER_yes_pm ~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
+### Moderation analysis: ER use & PSS
+Malleability belief weakens the association between stress and ER use. 
+```{r PSS ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+# stress predicting whether or not ER strategy was selected
+# CESD: sd=12.04
+ER <- lm(ER_yes_pm ~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(ER)
-describe(data$CESD_gmc) #for standard deviations
-ef <- effects::effect(term="PSS_gmc*CESD_gmc", xlevels= list(CESD_gmc=c(-11.98, 11.98)), mod=ER)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
-ggplot(efdata, aes(x=PSS_gmc, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
-    labs(x= "PSS", y="ER use", color="CESD", fill="CESD") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
-    scale_x_continuous(breaks = seq(-12, 20, by=2), limits=c(-12,20))
-# IBES
-ER <- lm(ER_yes_pm ~ PSS_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group_code, data=data)
-summary(ER)
-describe(data$IBES_gmc) #for standard deviations
-ef <- effects::effect(term="PSS_gmc*IBES_gmc", xlevels= list(IBES_gmc=c(-3.49, 3.49)), mod=ER)
+#N.S.
+# IBES sd = 3.47
+ER <- lm(ER_yes_pm ~ PSS_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(ER) #p=0.06
+describe(data_b$IBES_gmc) #for standard deviations
+ef <- effects::effect(term="PSS_gmc*IBES_gmc", xlevels= list(IBES_gmc=c(-3.47, 3.47)), mod=ER)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
 efdata$IBES_gmc<-as.factor(efdata$IBES_gmc)
 ggplot(efdata, aes(x=PSS_gmc, y=fit, color=IBES_gmc,group=IBES_gmc)) + 
@@ -381,64 +396,307 @@ ggplot(efdata, aes(x=PSS_gmc, y=fit, color=IBES_gmc,group=IBES_gmc)) +
     labs(x= "PSS", y="ER use", color="IBES", fill="IBES") +
     theme_classic() + theme(text=element_text(size=12)) + 
     scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
-    scale_x_continuous(breaks = seq(-12, 20, by=2), limits=c(-12,20))
+    scale_x_continuous(breaks = seq(-12, 20, by=4), limits=c(-12,20))
 #IBES significantly moderates
-#NIHCB
-ER <- lm(ER_yes_pm ~ PSS_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group_code, data=data)
+#NIHCB sd = 15.87
+ER <- lm(ER_yes_pm ~ PSS_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
 summary(ER)
+#N.S.
 #MCI
-
-# stress predicting ER strategy preference
-#distraction
-distr <- lm(distr_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(distr) #higher PSS score is associated with higher percentage of using distraction, effect holds when other variables are controlled for
-# b = 0.0063495  
-#minimizing
-min <- lm(min_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(min) #higher PSS score is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
-# b = 0.0026587  
-#reappraisal
-reap <- lm(reap_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(reap) #higher PSS score is associated with higher percentage of using reappraisal, effect holds when other variables are controlled for
-# b = 0.0034515  
+ER <- lm(ER_yes_pm ~ PSS_gmc*Group+CESD_gmc+IBES_gmc+NIHCB_gmc, data=data_b)
+summary(ER)
+#N.S.
 ```
 
-### Association with mean stress score in EMA
-```{r PSS, echo=TRUE,eval=TRUE,warning=F, message=F}
+### Moderation analysis: strategy preference & PSS
+```{r PSS ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+# stress predicting ER strategy preference
+# CESD
+#distraction
+distr <- lm(distr_pm~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(distr)
+#N.S.
+#minimizing
+min <- lm(min_pm~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min)
+#N.S.
+#reappraisal
+reap <- lm(reap_pm~ PSS_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(reap) 
+#N.S.
+# IBES
+# distraction
+distr <- lm(distr_pm~ PSS_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(distr)
+ef <- effects::effect(term="PSS_gmc*IBES_gmc", xlevels= list(IBES_gmc=c(-3.47, 3.47)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$IBES_gmc<-as.factor(efdata$IBES_gmc)
+g1<-ggplot(efdata, aes(x=PSS_gmc, y=fit, color=IBES_gmc,group=IBES_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=IBES_gmc),alpha=0.3) + 
+    labs(x= "PSS", y="Distraction Use", color="IBES", fill="IBES") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-12, 20, by=4), limits=c(-12,20))
+#minimizing
+min <- lm(min_pm~ PSS_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min)
+ef <- effects::effect(term="PSS_gmc*IBES_gmc", xlevels= list(IBES_gmc=c(-3.47, 3.47)), mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$IBES_gmc<-as.factor(efdata$IBES_gmc)
+g2<-ggplot(efdata, aes(x=PSS_gmc, y=fit, color=IBES_gmc,group=IBES_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=IBES_gmc),alpha=0.3) + 
+    labs(x= "PSS", y="Minimizing Use", color="IBES", fill="IBES") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(-0.02, 0.6)) +
+    scale_x_continuous(breaks = seq(-12, 20, by=4), limits=c(-12,20))
+#reappraisal
+reap <- lm(reap_pm~ PSS_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(reap) 
+#N.S.
+# NIHCB
+# distraction
+distr <- lm(distr_pm~ PSS_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(distr)
+#N.S.
+#minimizing
+min <- lm(min_pm~ PSS_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(min)
+# N.S.
+#reappraisal
+reap <- lm(reap_pm~ PSS_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(reap) 
+#N.S.
+# MCI
+# distraction
+distr <- lm(distr_pm~ PSS_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(distr)
+#N.S.
+#minimizing
+min <- lm(min_pm~ PSS_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(min)
+#N.S.
+#reappraisal
+reap <- lm(reap_pm~ PSS_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(reap) 
+#N.S.
+grid.arrange(g1, g2, ncol=2)
+```
+
+### Association between overall ER use & mean stress score in ESM
+Higher ESM stress is associated with higher overall ER use, and all three strategy use. Among the specific strategies, distraction is the most influenced by stress, followed by minimizing and reappraisal.
+```{r ESMstress ER, echo=FALSE,eval=FALSE,warning=F, message=F}
 # stress predicting whether or not ER strategy was selected
-ER <- lm(ER_yes_pm ~ stress_pm+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
+ER <- lm(ER_yes_pm ~ stress_pm_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(ER) #higher ESM stress is associated with higher percentage of using emotion regulation, effect holds when other variables are controlled for
-# b = 0.1017433  
+# b = 0.0932690  
 # stress predicting ER strategy preference
 #distraction
-distr <- lm(distr_pm~ stress_pm+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(distr) #higher PSS score is associated with higher percentage of using distraction, effect holds when other variables are controlled for
-# b = 0.0478474    
+distr <- lm(distr_pm~ stress_pm_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(distr) #higher ESM stress is associated with higher percentage of using distraction, effect holds when other variables are controlled for
+# b = 0.0487570      
 #minimizing
-min <- lm(min_pm~ stress_pm+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(min) #higher PSS score is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
-# b = 0.0355344    
+min <- lm(min_pm~ stress_pm_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min) #higher ESM stress is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
+# b = 0.031064       
 #reappraisal
-reap <- lm(reap_pm~ stress_pm+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
+reap <- lm(reap_pm~ stress_pm_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
 summary(reap) #higher PSS score is associated with higher percentage of using reappraisal, effect holds when other variables are controlled for
-# b = 0.0304417    
+# b = 0.0302119      
 ```
 
-### Hurdle models for strategy use
-Given the prevalence of 0 observation for specific strategy use, fit a hurdle model
-```{r hurdle pss, echo=TRUE,eval=TRUE,warning=F, message=F}
-# stress predicting whether or not ER strategy was selected
-library("pscl")
+### Moderation analysis: ER use & ESM stress
+```{r ESMstress ER mod, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
+# stress predicting whether or not overall ER strategy was used
+# CESD
+ER <- lm(ER_yes_pm ~ stress_pm_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(ER)
+# N.S.
+# IBES
+ER <- lm(ER_yes_pm ~ stress_pm_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(ER)
+#N.S.
+#NIHCB
+ER <- lm(ER_yes_pm ~ stress_pm_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(ER)
+# N.S.
+#NIHCB significantly moderate
+#MCI
+ER <- lm(ER_yes_pm ~ stress_pm_gmc*Group+CESD_gmc+IBES_gmc+NIHCB_gmc, data=data_b)
+summary(ER)
+#N.S.
+```
+
+### Moderation analysis: Strategy preference & ESM stress
+Depressive symptoms weaken the association between stress and distraction use.
+Depressive symptoms weaken the association between stress and reappraisal use.
+Fluid cognition score weakens the association between stress and all three strategy use (Note, for distraction p=0.08). People with less cognitive resources use distraction a lot more when encountering stress. (the only big increase in strategy selection frequency for people with more cognitive resources is distraction)
+Stress is more positively associated with distraction in CN adults
+Stress is more positively associated with reappraisal use in CN adults. (p=0.07)
+```{r ESMstress ER mod strategy, fig.width=10, fig.height=8, echo=TRUE,eval=TRUE,warning=F, message=F}
 # stress predicting ER strategy preference
+# CESD
 #distraction
-distr_hurdle <- hurdle(distr_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(distr_hurdle) #higher PSS score is associated with higher percentage of using distraction, effect holds when other variables are controlled for
+distr <- lm(distr_pm~ stress_pm_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(distr)
+ef <- effects::effect(term="stress_pm_gmc*CESD_gmc", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g1<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "ESM stress", y="Distraction Use", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
 #minimizing
-min_hurdle <- lm(min_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(min_hurdle) #higher PSS score is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
+min <- lm(min_pm~ stress_pm_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min)
+#N.S.
 #reappraisal
-reap_hurdle <- lm(reap_pm~ PSS_gmc+CESD_gmc+IBES_gmc+NIHCB_gmc+Group_code, data=data)
-summary(reap_hurdle) #higher PSS score is associated with higher percentage of using minimizing, effect holds when other variables are controlled for
+reap <- lm(reap_pm~ stress_pm_gmc*CESD_gmc+IBES_gmc+NIHCB_gmc+Group, data=data_b)
+summary(reap) 
+ef <- effects::effect(term="stress_pm_gmc*CESD_gmc", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g2<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "ESM stress", y="Reappraisal Use", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0, 0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+# IBES
+# distraction
+distr <- lm(distr_pm~ stress_pm_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(distr)
+#N.S.
+#minimizing
+min <- lm(min_pm~ stress_pm_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(min)
+#N.S.
+#reappraisal
+reap <- lm(reap_pm~ stress_pm_gmc*IBES_gmc+CESD_gmc+NIHCB_gmc+Group, data=data_b)
+summary(reap) 
+#N.S.
+# NIHCB
+# distraction
+distr <- lm(distr_pm~ stress_pm_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(distr)
+ef <- effects::effect(term="stress_pm_gmc*NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g3<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "ESM stress", y="Distraction Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+#minimizing
+min <- lm(min_pm~ stress_pm_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(min)
+ef <- effects::effect(term="stress_pm_gmc*NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g4<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "ESM stress", y="Minimizing Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(-0.02,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+#reappraisal
+reap <- lm(reap_pm~ stress_pm_gmc*NIHCB_gmc+CESD_gmc+IBES_gmc+Group, data=data_b)
+summary(reap) 
+ef <- effects::effect(term="stress_pm_gmc*NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g5<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "ESM stress", y="Reappraisal Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+# MCI
+# distraction
+distr <- lm(distr_pm~ stress_pm_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(distr)
+ef <- effects::effect(term="stress_pm_gmc*Group", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g6<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "ESM stress", y="Distraction Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+#minimizing
+min <- lm(min_pm~ stress_pm_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(min)
+#N.S.
+#reappraisal
+reap <- lm(reap_pm~ stress_pm_gmc*Group+CESD_gmc+NIHCB_gmc+IBES_gmc, data=data_b)
+summary(reap) 
+ef <- effects::effect(term="stress_pm_gmc*Group", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g7<-ggplot(efdata, aes(x=stress_pm_gmc, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "ESM stress", y="Reappraisal Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(0,0.6)) +
+    scale_x_continuous(breaks = seq(-2, 4, by=1), limits=c(-2,4))
+grid.arrange(g1, g2, g3, g4, g5, g6, g7, ncol=3)
+```
+
+## Multilevel Modeling - hurdle model
+Given the prevalence of 0 observation for specific strategy use & overall ER use, fit a hurdle model for multilevel modeling
+
+### Stress predicting overall ER use & each strategy use
+```{r withinER,echo=TRUE,eval=TRUE,warning=F, message=F}
+hurdle_model <- hurdle(ER_yes ~ stress_w + stress_b + PSS_gmc + CESD_gmc + IBES_gmc + NIHCB_gmc + Group, 
+                       data = data,
+                       dist = "poisson")  # Assuming Poisson distribution for the count data
+
+summary(hurdle_model)
+data
+```
+
+### Moderation analysis: overall ER use
+```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, message=F}
+
+
+```
+
+### Moderation analysis: specific ER use
+```{r withinER strategy mod,echo=TRUE,eval=TRUE,warning=F, message=F}
+
+
+```
+
+```{r hurdle pss, echo=FALSE,eval=FALSE,warning=F, message=F}
+# stress predicting whether or not overall ER was used
+# stress predicting ER strategy preference
+hurdle_model <- hurdle(count_var ~ predictor | predictor, 
+                       data = data,
+                       dist = "poisson")  # Assuming Poisson distribution for the count data
+
+summary(hurdle_model)
+
 ```
 
 
