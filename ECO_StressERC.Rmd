@@ -686,97 +686,419 @@ summary(ER)
 ```
 
 ### Moderation analysis: overall ER use
-Higher momentary within-person stress is associated with using more distraction.
-Higher between-person stress is associated with using more distraction.
+Higher momentary within-person stress is associated with using all three strategies more (same finding at the time of the prompt).
+Higher between-person stress is associated with using all three strategies more (same finding at the time of the prompt).
 ```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
-distr <- glmer(distr_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+distr <- glmer(distr_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+               family = binomial(link = "logit"),
+               data = data,
+               control = glmerControl(optimizer = "bobyqa"))
 summary(distr)
-distr <- glmer(distr_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+#w: b=0.194915; b: b=0.667780   
+distr <- glmer(distr_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+               family = binomial(link = "logit"),
+               data = data,
+               control = glmerControl(optimizer = "bobyqa"))
 summary(distr)
-min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+#w: b=0.29874    ; b: b=0.55748        
+min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+             family = binomial(link = "logit"),
+             data = data,
+             control = glmerControl(optimizer = "bobyqa"))
 summary(min)
-min <- glmer(min_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+#w: b = 0.12584; b: b = 0.52575    
+min <- glmer(min_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+             family = binomial(link = "logit"),
+             data = data,
+             control = glmerControl(optimizer = "bobyqa"))
 summary(min)
-reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+#w: b=0.30049; b: b = 0.46522    
+reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+              family = binomial(link = "logit"),
+              data = data,
+              control = glmerControl(optimizer = "bobyqa"))
 summary(reap)
+#w: b=0.170498; b: b=0.541553   
 reap <- glmer(reap_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
-                        family = binomial(link = "logit"),
-                        data = data)
-
+                (1 | PID), 
+              family = binomial(link = "logit"),
+              data = data,
+              control = glmerControl(optimizer = "bobyqa"))
 summary(reap)
+#w: b=0.269128; b: b=0.550578   
 ```
 
 ### Moderation analysis: specific ER use
-```{r withinER strategy mod,echo=TRUE,eval=TRUE,warning=F, message=F}
-distr <- glmer(distr_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
+```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=TRUE, message=F}
+#CESD
+distr <- glmer(distr_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + (1 | PID), 
+               family = binomial(link = "logit"),
+               data = data)
+summary(distr)
+ef <- effects::effect(term="CESD_gmc:stress_b", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g1<-ggplot(efdata, aes(x=stress_b, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Distraction Use", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.1), limits=c(0,0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5,4))
+distr <- glmer(distr_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc +(1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 
 summary(distr)
-distr <- glmer(distr_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
+min <- glmer(min_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc +(1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(min)
+min <- glmer(min_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc+(1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+ef <- effects::effect(term="stress_w:CESD_gmc", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g2<-ggplot(efdata, aes(x=stress_w, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "stress_w", y="Minimizing Use, Prompt", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.08, by=0.02), limits=c(0,0.08)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5,6))
+reap <- glmer(reap_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + 
                         (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(reap)
+ef <- effects::effect(term="CESD_gmc:stress_b", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g3<-ggplot(efdata, aes(x=stress_b, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.1), limits=c(0,0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5,4))
+reap <- glmer(reap_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(reap)
+ef <- effects::effect(term="CESD_gmc:stress_b", xlevels= list(CESD_gmc=c(-12.04, 12.04)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$CESD_gmc<-as.factor(efdata$CESD_gmc)
+g4<-ggplot(efdata, aes(x=stress_b, y=fit, color=CESD_gmc,group=CESD_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=CESD_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use, prompt", color="CESD_gmc", fill="CESD_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(-0.015, 0.2)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5,4))
+#IBES #N.S.
+distr <- glmer(distr_yes ~ stress_w*IBES_gmc + stress_b*IBES_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(distr)
+distr <- glmer(distr_yes_prompt ~ stress_w*IBES_gmc + stress_b*IBES_gmc + (1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 
 summary(distr)
-min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
+min <- glmer(min_yes ~ stress_w*IBES_gmc + stress_b*IBES_gmc + (1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
-
 summary(min)
-min <- glmer(min_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
+min <- glmer(min_yes_prompt ~ stress_w*IBES_gmc + stress_b*IBES_gmc +(1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
-
 summary(min)
-reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
+reap <- glmer(reap_yes ~ stress_w*IBES_gmc + stress_b*IBES_gmc + (1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 
 summary(reap)
-reap <- glmer(reap_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
-                        (1 | PID), 
+reap <- glmer(reap_yes_prompt ~ stress_w*IBES_gmc + stress_b*IBES_gmc +(1 | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 
 summary(reap)
+#NIHCB
+distr <- glmer(distr_yes ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(distr)
+#weaken, both within and between
+ef <- effects::effect(term="stress_w:NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g5<-ggplot(efdata, aes(x=stress_w, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_w", y="Distraction Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(0, 0.2)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="NIHCB_gmc:stress_b", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g6<-ggplot(efdata, aes(x=stress_b, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Distraction Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.2), limits=c(0, 0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
 
+distr <- glmer(distr_yes_prompt ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(distr)
+#N.S.
+
+min <- glmer(min_yes ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc +(1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(min)
+#weaken, between
+ef <- effects::effect(term="NIHCB_gmc:stress_b", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g7<-ggplot(efdata, aes(x=stress_b, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Minimizing Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.2), limits=c(0, 0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+min <- glmer(min_yes_prompt ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc +(1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+             control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+#strengthen, within (p=0.09)
+ef <- effects::effect(term="stress_w:NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g8<-ggplot(efdata, aes(x=stress_w, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_w", y="Mimimizing Use, prompt", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.05, by=0.01), limits=c(0, 0.05)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+
+reap <- glmer(reap_yes ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(reap)
+#weaken, both within and between
+ef <- effects::effect(term="stress_w:NIHCB_gmc", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g9<-ggplot(efdata, aes(x=stress_w, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_w", y="Reappraisal Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(0, 0.2)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="NIHCB_gmc:stress_b", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g10<-ggplot(efdata, aes(x=stress_b, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.2), limits=c(0, 0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+reap <- glmer(reap_yes_prompt ~ stress_w*NIHCB_gmc + stress_b*NIHCB_gmc + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(reap)
+#weaken, between, p=0.06
+ef <- effects::effect(term="NIHCB_gmc:stress_b", xlevels= list(NIHCB_gmc=c(-15.87, 15.87)), mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$NIHCB_gmc<-as.factor(efdata$NIHCB_gmc)
+g11<-ggplot(efdata, aes(x=stress_b, y=fit, color=NIHCB_gmc,group=NIHCB_gmc)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=NIHCB_gmc),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use, prompt", color="NIHCB_gmc", fill="NIHCB_gmc") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.3, by=0.05), limits=c(-0.04, 0.3)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+#Group
+distr <- glmer(distr_yes ~ stress_w*Group + stress_b*Group + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(distr)
+ef <- effects::effect(term="stress_w:Group", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g12<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Distraction Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(0,0.2)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g13<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Distraction Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.9, by=0.2), limits=c(0,0.9)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+distr <- glmer(distr_yes_prompt ~ stress_w*Group + stress_b*Group + (1 | PID),
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(distr)
+ef <- effects::effect(term="Group:stress_b", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g14<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Distraction Use, prompt", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.5, by=0.1), limits=c(-0.02,0.5)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+min <- glmer(min_yes ~ stress_w*Group + stress_b*Group + (1 | PID),
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+ef <- effects::effect(term="stress_w:Group", mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g15<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Minimizing Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g16<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Minimizing Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(-0.02,0.6)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+min <- glmer(min_yes_prompt ~ stress_w*Group + stress_b*Group + (1 | PID),
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+ef <- effects::effect(term="Group:stress_b", mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g17<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Minimizing Use, Prompt", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.4, by=0.1), limits=c(-0.02,0.4)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+reap <- glmer(reap_yes ~ stress_w*Group + stress_b*Group + (1 | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(reap)
+ef <- effects::effect(term="stress_w:Group", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g18<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Reappraisal Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g19<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.1), limits=c(-0.02,0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+reap <- glmer(reap_yes_prompt ~ stress_w*Group + stress_b*Group + (1 | PID),
+              family = binomial(link = "logit"),
+              data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(reap)
+ef <- effects::effect(term="stress_w:Group", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g20<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Reappraisal Use, Prompt", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.05, by=0.01), limits=c(0,0.05)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g21<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use, Prompt", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.4, by=0.1), limits=c(-0.05,0.4)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
 ```
 
-```{r hurdle pss, echo=FALSE,eval=FALSE,warning=F, message=F}
-# stress predicting whether or not overall ER was used
-# stress predicting ER strategy preference
-hurdle_model <- hurdle(count_var ~ predictor | predictor, 
-                       data = data,
-                       dist = "poisson")  # Assuming Poisson distribution for the count data
-
-summary(hurdle_model)
-
+### Moderation Visualization
+```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=TRUE, message=F}
+grid.arrange(g1, g2, g3, g4,ncol=2)
+grid.arrange(g5, g6, g7, g8, ncol=2) 
+grid.arrange(g9, g10, g11,ncol=2) 
+grid.arrange(g12, g13, g14, ncol=2)
+ grid.arrange(g15, g16, g17, ncol=2)
+grid.arrange(g18, g19, g20, g21, ncol=2)
 ```
-
-
