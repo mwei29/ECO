@@ -205,7 +205,11 @@ data <-ESM_clean %>%
 data_b <- data %>%
   group_by(PID) %>%
   summarise(
+    Group_code=first(Group_code),
     Group = first(Group),  # Assuming all entries of a single group per PID are the same
+    completed_sum = sum(completed==1,na.rm = TRUE),
+    ER_yes_sum = sum(ER_yes,na.rm = TRUE),
+    ER_yes_prompt_sum = sum(ER_yes_prompt,na.rm=TRUE),
     perceived_stress_sum = first(perceived_stress_sum),
     CES_D_sum = first(CES_D_sum),
     dweck_sum = first(dweck.sum),
@@ -227,6 +231,8 @@ data_b <- data %>%
   ) %>%
   ungroup() %>%
   as.data.frame()
+sum(data_b$ER_yes_sum)
+sum(data_b$ER_yes_prompt_sum)
 ```
 
 ### Check internal consistency
@@ -242,12 +248,12 @@ omega(belief) #alpha=0.75, omega = 0.79
 
 ### Data distribution and Descriptive Stats
 ```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=TRUE,warning=FALSE, message=TRUE}
-layout(matrix(1:15, 3,5, byrow=TRUE)); 
+layout(matrix(1:16, 4,4, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
-variables <- c("perceived_stress_sum","CES_D_sum", "dweck_sum","sd_cogflu_uc","stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm","ER_yes_prompt_pm","distr_prompt_pm","min_prompt_pm","reap_prompt_pm")
+variables <- c("completed_sum","ER_yes_sum","ER_yes_prompt_sum","perceived_stress_sum","CES_D_sum", "dweck_sum","sd_cogflu_uc","stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm","ER_yes_prompt_pm","distr_prompt_pm","min_prompt_pm","reap_prompt_pm")
 for (vid in 1:length(variables)) { #vid<-3
-  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "# of Prompts")
+  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
 }
 # boxplot to check the relationship between cognitive fluid score and cognitive impairment
 boxplot(data_b$sd_cogflu_uc~data_b$Group, main="NIHCB score by MCI group", xlab= "Group", ylab="Score", 
@@ -256,8 +262,10 @@ boxplot(data_b$sd_cogflu_uc~data_b$Group, main="NIHCB score by MCI group", xlab=
         notch = TRUE,
         varwidth = TRUE)
 par(mfrow = c(1, 1))
-#OVerall stats including centered variables
+# Overall stats including centered variables
 describe(data_b)
+length(which(data_b$CES_D_sum>=16))
+# 67 participants met the cutoff for significant depressive symptomatology
 ```
 
 ### Demographics
@@ -348,6 +356,48 @@ stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
 #within person correlations
 stats$rwg #Within-Person Correlation for Raw Scores
 stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
+
+within_person_correlations <- stats$rwg
+
+# Extract the variable names
+var_names <- colnames(within_person_correlations)
+
+# Initialize an empty matrix to store p-values
+p_value_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names))
+rownames(p_value_matrix) <- var_names
+colnames(p_value_matrix) <- var_names
+
+# Loop through variable pairs and calculate p-values using cor.test
+for (i in 1:length(var_names)) {
+  for (j in 1:length(var_names)) {
+    if (i != j) {  # Avoid calculating for the same variable
+      # Handle missing values using na.omit
+      valid_data <- na.omit(within_person_correlations[, c(i, j)])
+      
+      # Only run cor.test if enough valid data is available
+      if (nrow(valid_data) > 2) {  # cor.test requires at least 3 observations
+        cor_test_result <- cor.test(valid_data[, 1], valid_data[, 2])
+        p_value_matrix[i, j] <- cor_test_result$p.value
+      } else {
+        p_value_matrix[i, j] <- NA  # Not enough data to calculate p-value
+      }
+    }
+  }
+}
+
+# View the p-value matrix
+print(p_value_matrix)
+
+library(Hmisc)
+
+# Select the numeric variables you want to correlate
+cor_data <- select(data_b, c("ER_yes_pm","distr_pm", "min_pm", "reap_pm", "stress_pm", "CES_D_sum", "Group_code"))
+# Compute correlation matrix with significance levels
+cor_matrix <- rcorr(as.matrix(cor_data))
+# View the correlation matrix
+cor_matrix$r   # This is the correlation matrix
+# View the p-values for the correlations
+cor_matrix$P   # This shows the p-values for significance
 ```
 
 ### Association between overall ER use & PSS
@@ -676,6 +726,11 @@ ER <- glmer(ER_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Gro
                         data = data)
 
 summary(ER)
+ER <- glmer(ER_yes ~ stress_w + stress_b + CESD_gmc + Group + 
+                        (1 + stress_w | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(ER)
 #Just whether ER is use *at the time of the prompt*
 ER <- glmer(ER_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
                         (1 | PID), 
@@ -688,8 +743,14 @@ summary(ER)
 ### Moderation analysis: overall ER use
 Higher momentary within-person stress is associated with using all three strategies more (same finding at the time of the prompt).
 Higher between-person stress is associated with using all three strategies more (same finding at the time of the prompt).
+I am not sure why I didn't actually run the moderation analysis for overall er use...
 ```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
 distr <- glmer(distr_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+               family = binomial(link = "logit"),
+               data = data,
+               control = glmerControl(optimizer = "bobyqa"))
+summary(distr)
+distr <- glmer(distr_yes ~ stress_w + stress_b + CESD_gmc + Group + (1 + stress_w|PID), 
                family = binomial(link = "logit"),
                data = data,
                control = glmerControl(optimizer = "bobyqa"))
@@ -702,6 +763,11 @@ distr <- glmer(distr_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NI
 summary(distr)
 #w: b=0.29874    ; b: b=0.55748        
 min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + (1 | PID), 
+             family = binomial(link = "logit"),
+             data = data,
+             control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+min <- glmer(min_yes ~ stress_w + stress_b + CESD_gmc + Group +(1 + stress_w|PID), 
              family = binomial(link = "logit"),
              data = data,
              control = glmerControl(optimizer = "bobyqa"))
@@ -719,6 +785,11 @@ reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc +
               control = glmerControl(optimizer = "bobyqa"))
 summary(reap)
 #w: b=0.170498; b: b=0.541553   
+reap <- glmer(reap_yes ~ stress_w + stress_b + CESD_gmc + Group + (1 + stress_w|PID), 
+              family = binomial(link = "logit"),
+              data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(reap)
 reap <- glmer(reap_yes_prompt ~ stress_w + stress_b + CESD_gmc + IBES_gmc + NIHCB_gmc + Group + 
                 (1 | PID), 
               family = binomial(link = "logit"),
@@ -731,7 +802,7 @@ summary(reap)
 ### Moderation analysis: specific ER use
 ```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=TRUE, message=F}
 #CESD
-distr <- glmer(distr_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + (1 | PID), 
+distr <- glmer(distr_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + (1 + stress_w | PID), 
                family = binomial(link = "logit"),
                data = data)
 summary(distr)
@@ -751,7 +822,7 @@ distr <- glmer(distr_yes_prompt ~ stress_w*CESD_gmc + stress_b*CESD_gmc +(1 | PI
                         data = data)
 
 summary(distr)
-min <- glmer(min_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc +(1 | PID), 
+min <- glmer(min_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc +(1 + stress_w | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 summary(min)
@@ -772,7 +843,7 @@ g2<-ggplot(efdata, aes(x=stress_w, y=fit, color=CESD_gmc,group=CESD_gmc)) +
     scale_y_continuous(breaks = seq(0, 0.08, by=0.02), limits=c(0,0.08)) +
     scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5,6))
 reap <- glmer(reap_yes ~ stress_w*CESD_gmc + stress_b*CESD_gmc + 
-                        (1 | PID), 
+                        (1 + stress_w| PID), 
                         family = binomial(link = "logit"),
                         data = data)
 summary(reap)
@@ -991,7 +1062,7 @@ g14<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) +
     scale_y_continuous(breaks = seq(0, 0.5, by=0.1), limits=c(-0.02,0.5)) +
     scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
 
-min <- glmer(min_yes ~ stress_w*Group + stress_b*Group + (1 | PID),
+min <- glmer(min_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID),
                         family = binomial(link = "logit"),
                         data = data,
               control = glmerControl(optimizer = "bobyqa"))
