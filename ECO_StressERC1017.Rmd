@@ -67,6 +67,9 @@ data_b <- data %>%
   ungroup() %>%
   as.data.frame()
 sum(data_b$ER_yes_sum)
+data$Group <- relevel(data$Group, ref="CN")
+data$Group_code<-as.factor(data$Group_code)
+data$Group_code <- relevel(data$Group_code, ref = "0")
 ```
 
 ### Check internal consistency
@@ -160,7 +163,6 @@ model_performance(fit0)
 ### Correlations
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
 data$PID<-as.numeric(data$PID)
-data$Group_code <- as.factor(data$Group_code)
 stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","CES_D_sum")),group="PID")
 #between person correlations
 stats$rbg #Between-Person Correlation for Raw Scores
