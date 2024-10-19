@@ -28,7 +28,7 @@ library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);libra
 ## Data Quality Check
 
 ### Dataset Cleaning
-```{r center, eval=TRUE, echo=FALSE, warning=FALSE, cache=TRUE, message=FALSE}
+```{r center, eval=TRUE, echo=FALSE, warning=FALSE, cache=FALSE, message=FALSE}
 # Read in dataset
 ESM_clean<-fread("ESM_clean.csv")
 survey <- fread("ECO_baseline.csv")
@@ -73,14 +73,14 @@ data$Group_code <- relevel(data$Group_code, ref = "0")
 ```
 
 ### Check internal consistency
-```{r Internal consistency, eval=TRUE, echo=TRUE, cache=TRUE, warning=FALSE, message=FALSE}
+```{r Internal consistency, eval=TRUE, echo=TRUE, cache=FALSE, warning=FALSE, message=FALSE}
 #Check internal consistency
 CESD <- select(survey,CES_D_1:CES_D_20)
 omega(CESD) #alpha=0.93, omega=0.95
 ```
 
 ### Data distribution and Descriptive Stats
-```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=TRUE,warning=FALSE, message=TRUE}
+```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=FALSE,warning=FALSE, message=TRUE}
 layout(matrix(1:8, 2,4, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
@@ -96,7 +96,7 @@ length(which(data_b$CES_D_sum>=16))
 ```
 
 ### Demographics
-```{r Demo, eval=TRUE, echo=TRUE,cache=TRUE, warning=FALSE, message=FALSE}
+```{r Demo, eval=TRUE, echo=TRUE,cache=FALSE, warning=FALSE, message=FALSE}
 #Demo table
 demo.sum <- data %>% distinct(PID, .keep_all=TRUE) %>%
   select(PID, Group, Race2_1, Race2_2, Race2_3, Race2_4, Race2_5, Race2_6, Race2_7, 
@@ -139,7 +139,7 @@ demo.sum %>%
 ```
 
 ### intraclass correlations of EMA items
-```{r EMA cor, echo=TRUE,eval=TRUE,cache=TRUE,warning=F, message=F}
+```{r EMA cor, echo=TRUE,eval=TRUE,cache=FALSE,warning=F, message=F}
 fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
 model_performance(fit_logit) 
 #ICC = .463,54% variance is within person
@@ -161,7 +161,7 @@ model_performance(fit0)
 ## Between-Person Analysis
 
 ### Correlations
-```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
+```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 data$PID<-as.numeric(data$PID)
 stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","CES_D_sum")),group="PID")
 #between person correlations
@@ -232,7 +232,7 @@ print(p_value_matrix)
 Higher momentary within-person stress is associated with using more ER.
 Higher between-person stress is associated with using more ER.
 At the time of the prompt, higher momentary within-person stress is associated with more ER.
-```{r withinER,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
+```{r withinER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 ER <- glmer(ER_yes ~ stress_w + stress_b + Group + 
                         (1 + stress_w | PID), 
                         family = binomial(link = "logit"),
@@ -260,7 +260,7 @@ summary(reap)
 ```
 
 ### Moderation analysis: overall ER use
-```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=TRUE, message=F}
+```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 ER <- glmer(ER_yes ~ stress_w*Group + stress_b*Group + 
               (1 + stress_w | PID), 
             family = binomial(link = "logit"),
@@ -282,7 +282,7 @@ g0w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) +
 ```
 
 ### Moderation analysis: specific ER use
-```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=TRUE, message=F}
+```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
 #Group
 distr <- glmer(distr_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID), 
                         family = binomial(link = "logit"),
@@ -376,7 +376,7 @@ g3b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) +
 ```
 
 ### Moderation Visualization
-```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=TRUE, message=F}
+```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
 grid.arrange(g0w,ncol=1)
 grid.arrange(g1w, g2w, g3w, ncol=2) 
 grid.arrange(g1b, g2b, g3b,ncol=2) 
