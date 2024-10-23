@@ -1,0 +1,383 @@
+---
+title: "Between- & Within- Person Stress Predicts Emotion Regulation Choice: The Role of Cognitive Resources and Age"
+author: "Mengzhe Wei, Tammy English"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    theme: journal
+    toc: yes
+    toc_float:
+      collapsed: true
+---
+
+# ECO Stress and ER Choice Analysis
+Notes: Started 17 Oct 2024 by Mengzhe Wei to run analysis looking at ER Decisions and strategy selection based on stress. 
+Within person (level 1): stress level in EMA
+Between person (level 2): MCI status (young, CN, MCI)
+Outcome variables: 
+1. Whether participant chose to influence their emotions; 
+2. the frequency of strategy use
+
+```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
+# Set up packages and upload data. 
+rm(list=ls());
+options(warnPartialMatchDollar=TRUE);   # safety option
+library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table);library(lmerTest);library(performance);library(car);library(gridExtra);library(glmmTMB)
+```
+
+## Data Quality Check
+
+### Dataset Cleaning
+```{r center, eval=TRUE, echo=FALSE, warning=FALSE, cache=FALSE, message=FALSE}
+# Read in dataset
+ESM_clean<-fread("ESM_clean.csv")
+survey <- fread("ECO_baseline.csv")
+data <-ESM_clean %>%
+  group_by(PID) %>%
+  mutate (Group_code = case_when(Group == 0 ~ -1,  Group == 1 ~ 0, Group == 2 ~ 1),
+          Group = factor(Group_code, levels = -1:1, labels = c("YA","CN","MCI")),
+          stress_pm = mean(esm_stressed,na.rm=TRUE),
+          ER_yes_pm = sum(ER_yes,na.rm = TRUE)/ sum(completed==1,na.rm = TRUE),
+          distr_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(distr_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
+          min_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(min_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
+          reap_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(reap_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0))%>% 
+  ungroup()%>%
+  mutate(
+    stress_gmc = scale(esm_stressed, center = T, scale = F),
+    stress_w = esm_stressed - stress_pm,
+    stress_b = stress_gmc - stress_w,
+    stress_pm_gmc = scale(stress_pm, center = T, scale = F),
+    CESD_gmc = scale(CES_D_sum, center = T, scale = F)) %>%
+  as.data.frame()
+data_b <- data %>%
+  group_by(PID) %>%
+  summarise(
+    Group_code=first(Group_code),
+    Group = first(Group),  # Assuming all entries of a single group per PID are the same
+    completed_sum = sum(completed==1,na.rm = TRUE),
+    ER_yes_sum = sum(ER_yes,na.rm = TRUE),
+    CES_D_sum = first(CES_D_sum),
+    stress_pm = first(stress_pm),
+    stress_pm_gmc = first(stress_pm_gmc),
+    ER_yes_pm = first(ER_yes_pm),
+    distr_pm = first(distr_pm),
+    min_pm = first(min_pm),
+    reap_pm = first(reap_pm),
+    CESD_gmc = first(CESD_gmc)) %>%
+  ungroup() %>%
+  as.data.frame()
+sum(data_b$ER_yes_sum)
+data$Group <- relevel(data$Group, ref="CN")
+data$Group_code<-as.factor(data$Group_code)
+data$Group_code <- relevel(data$Group_code, ref = "0")
+```
+
+### Check internal consistency
+```{r Internal consistency, eval=TRUE, echo=TRUE, cache=FALSE, warning=FALSE, message=FALSE}
+#Check internal consistency
+CESD <- select(survey,CES_D_1:CES_D_20)
+omega(CESD) #alpha=0.93, omega=0.95
+```
+
+### Data distribution and Descriptive Stats
+```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=FALSE,warning=FALSE, message=TRUE}
+layout(matrix(1:8, 2,4, byrow=TRUE)); 
+par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
+#Check distribution of all data; loop through histogram
+variables <- c("completed_sum","ER_yes_sum","CES_D_sum", "stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
+for (vid in 1:length(variables)) { #vid<-3
+  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
+}
+par(mfrow = c(1, 1))
+# Overall stats including centered variables
+describe(data_b)
+length(which(data_b$CES_D_sum>=16))
+# 67 participants met the cutoff for significant depressive symptomatology
+```
+
+### Demographics
+```{r Demo, eval=TRUE, echo=TRUE,cache=FALSE, warning=FALSE, message=FALSE}
+#Demo table
+demo.sum <- data %>% distinct(PID, .keep_all=TRUE) %>%
+  select(PID, Group, Race2_1, Race2_2, Race2_3, Race2_4, Race2_5, Race2_6, Race2_7, 
+         Gender, Age)
+#Group, 0=young adult, 1=CN older adults, 2=MCI older adult
+demo.sum %>%
+  count(Group)
+#Race
+demo.sum %>%
+  summarise(
+    African_American_Black = mean(Race2_1), 
+    American_Indian_Alaskan_Native = mean(Race2_2),
+    Asian_Asian_American_Pacific_Islander = mean(Race2_3),
+    Middle_Eastern_Arab_American = mean(Race2_4),
+    Caucasian_European_American = mean(Race2_5),
+    Hispanic_Latino = mean(Race2_6),
+    Other = mean(Race2_7)
+  )
+#Age
+demo.sum %>%
+  summarise(
+    mean_age=mean(Age),
+    sd_age=sd(Age),
+    min_age=min(Age),
+    max_age=max(Age)
+  )
+#Age group by cognitive group
+demo.sum %>%
+  group_by(Group) %>%
+  summarise(
+    mean_age=mean(Age),
+    sd_age=sd(Age),
+    min_age=min(Age),
+    max_age=max(Age)
+  )
+#Gender
+demo.sum %>%
+  mutate (Gender = factor(Gender, levels = 0:2, labels = c("male","female","other"))) %>%
+  count(Gender)
+```
+
+### intraclass correlations of EMA items
+```{r EMA cor, echo=TRUE,eval=TRUE,cache=FALSE,warning=F, message=F}
+fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = .463,54% variance is within person
+fit_logit <- glmer(distr_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.464,54% variance is within person
+fit_logit <- glmer(min_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.435
+fit_logit <- glmer(reap_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
+model_performance(fit_logit) 
+#ICC = 0.48
+fit0 <- glmer(esm_stressed ~ 1 + (1 | PID), data = data)
+model_performance(fit0) 
+#ICC = 0.408, 59% variance is within person
+```
+
+
+## Between-Person Analysis
+
+### Correlations
+```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+data$PID<-as.numeric(data$PID)
+stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","CES_D_sum")),group="PID")
+#between person correlations
+stats$rbg #Between-Person Correlation for Raw Scores
+stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
+#within person correlations
+stats$rwg #Within-Person Correlation for Raw Scores
+stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
+
+within_person_correlations <- stats$rwg
+# Extract the variable names
+var_names <- colnames(within_person_correlations)
+# Initialize an empty matrix to store p-values
+p_value_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names))
+rownames(p_value_matrix) <- var_names
+colnames(p_value_matrix) <- var_names
+# Loop through variable pairs and calculate p-values using cor.test
+for (i in 1:length(var_names)) {
+  for (j in 1:length(var_names)) {
+    if (i != j) {  # Avoid calculating for the same variable
+      # Handle missing values using na.omit
+      valid_data <- na.omit(within_person_correlations[, c(i, j)])
+      
+      # Only run cor.test if enough valid data is available
+      if (nrow(valid_data) > 2) {  # cor.test requires at least 3 observations
+        cor_test_result <- cor.test(valid_data[, 1], valid_data[, 2])
+        p_value_matrix[i, j] <- cor_test_result$p.value
+      } else {
+        p_value_matrix[i, j] <- NA  # Not enough data to calculate p-value
+      }
+    }
+  }
+}
+# View the p-value matrix
+print(p_value_matrix)
+
+between_person_correlations <- stats$rbg
+# Extract the variable names
+var_names <- colnames(between_person_correlations)
+# Initialize an empty matrix to store p-values
+p_value_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names))
+rownames(p_value_matrix) <- var_names
+colnames(p_value_matrix) <- var_names
+# Loop through variable pairs and calculate p-values using cor.test
+for (i in 1:length(var_names)) {
+  for (j in 1:length(var_names)) {
+    if (i != j) {  # Avoid calculating for the same variable
+      # Handle missing values using na.omit
+      valid_data <- na.omit(between_person_correlations[, c(i, j)])
+      
+      # Only run cor.test if enough valid data is available
+      if (nrow(valid_data) > 2) {  # cor.test requires at least 3 observations
+        cor_test_result <- cor.test(valid_data[, 1], valid_data[, 2])
+        p_value_matrix[i, j] <- cor_test_result$p.value
+      } else {
+        p_value_matrix[i, j] <- NA  # Not enough data to calculate p-value
+      }
+    }
+  }
+}
+# View the p-value matrix
+print(p_value_matrix)
+```
+
+## Multilevel Modeling
+
+### Stress predicting overall ER use & each strategy use
+Higher momentary within-person stress is associated with using more ER.
+Higher between-person stress is associated with using more ER.
+At the time of the prompt, higher momentary within-person stress is associated with more ER.
+```{r withinER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+ER <- glmer(ER_yes ~ stress_w + stress_b + Group + 
+                        (1 + stress_w | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(ER)
+#increase, both sig
+distr <- glmer(distr_yes ~ stress_w + stress_b + Group + (1 + stress_w | PID), 
+               family = binomial(link = "logit"),
+               data = data,
+               control = glmerControl(optimizer = "bobyqa"))
+summary(distr)
+#increase, both sig    
+min <- glmer(min_yes ~ stress_w + stress_b + Group +(1 + stress_w|PID), 
+             family = binomial(link = "logit"),
+             data = data,
+             control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+#increase, only between sig    
+reap <- glmer(reap_yes ~ stress_w + stress_b + Group + (1 + stress_w|PID), 
+              family = binomial(link = "logit"),
+              data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(reap)
+#increase,both sig 
+```
+
+### Moderation analysis: overall ER use
+```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+ER <- glmer(ER_yes ~ stress_w*Group + stress_b*Group + 
+              (1 + stress_w | PID), 
+            family = binomial(link = "logit"),
+            data = data,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER) 
+#CN older adults increases ER more when they are more stressed than normal
+ef <- effects::effect(term="stress_w:Group", mod=ER)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g0w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="ER Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+```
+
+### Moderation analysis: specific ER use
+```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
+#Group
+distr <- glmer(distr_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(distr)
+# CN and MCI both increases distraction use when they are experiencing stress more than normal
+# CN increases distraction use more when they are experiencing stress in general 
+ef <- effects::effect(term="stress_w:Group", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g1w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Distraction Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(0,0.2)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=distr)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g1b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Distraction Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.9, by=0.2), limits=c(0,0.9)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+min <- glmer(min_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID),
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(min)
+# MCI increases minimizing use when they are experiencing stress more than normal
+# CN increases minimizing use more when they are experiencing stress in general
+ef <- effects::effect(term="stress_w:Group", mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g2w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Minimizing Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=min)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g2b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Minimizing Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(-0.02,0.6)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+
+reap <- glmer(reap_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID), 
+                        family = binomial(link = "logit"),
+                        data = data,
+              control = glmerControl(optimizer = "bobyqa"))
+summary(reap)
+# CN & MCI increases reappraisal use when they are experiencing stress more than normal
+# CN increases reappraisal use more when they are experiencing stress in general
+ef <- effects::effect(term="stress_w:Group", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g3w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_w", y="Reappraisal Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+ef <- effects::effect(term="Group:stress_b", mod=reap)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g3b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
+    geom_point() + 
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
+    labs(x= "stress_b", y="Reappraisal Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) + 
+    scale_y_continuous(breaks = seq(0, 0.8, by=0.1), limits=c(-0.02,0.8)) +
+    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+```
+
+### Moderation Visualization
+```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
+grid.arrange(g0w,ncol=1)
+grid.arrange(g1w, g2w, g3w, ncol=2) 
+grid.arrange(g1b, g2b, g3b,ncol=2) 
+```
