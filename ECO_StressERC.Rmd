@@ -24,21 +24,21 @@ Outcome variables:
 rm(list=ls());
 options(warnPartialMatchDollar=TRUE);   # safety option
 library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table);library(lmerTest);library(performance);library(car);library(gridExtra);library(glmmTMB)
-# Set up packages and upload data. 
-# rm(list=ls());
-# library(boxr);   
-# box_auth(); 
-# wustl.box <- TRUE;
+#Set up packages and upload data.
+rm(list=ls());
+library(boxr);
+box_auth();
+wustl.box <- TRUE;
 #Packages
-# library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
+library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse);library(boxr); library(psych)
 #Load the dataset
-#data_files <- box_ls('278065273295') 
-# file_name <- paste0("ECO_ESM_person-level.csv")
-# file_id <- box_search(file_name)
-# ESM <- box_read(file_id) %>% as.data.frame()
-# file_name <- paste0("ECO_baseline.csv")
-# file_id <- box_search(file_name)
-# survey <- box_read(file_id) %>% as.data.frame()
+data_files <- box_ls('278065273295')
+file_name <- paste0("ECO_ESM_person-level.csv")
+file_id <- box_search(file_name)
+ESM <- box_read(file_id) %>% as.data.frame()
+file_name <- paste0("ECO_baseline.csv")
+file_id <- box_search(file_name)
+survey <- box_read(file_id) %>% as.data.frame()
 ```
 
 ## Data Quality Check
@@ -169,7 +169,15 @@ ESM_test$reap_yes_prompt <- ifelse(is.na(ESM_test$esm_time_manage) | (is.na(ESM_
                             (!is.na(ESM_test$esm_howinfluence) & ESM_test$esm_howinfluence == 11 | 
                              !is.na(ESM_test$er_othermethods_posreapp) & ESM_test$er_othermethods_posreapp == 1), 
                             1, 0))
-ESM_clean <- ESM_test[, c("PID", "Group", "completed", "esm_time_manage","esm_stressed",  "ER_yes", "distr_yes", "min_yes", "reap_yes", "distr_yes_prompt", "min_yes_prompt","reap_yes_prompt","sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
+# Create NA composite
+ESM_test$negemotions <- rowMeans(ESM_test[,c("esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated")],na.rm=TRUE)
+ESM_test_lag <- ESM_test %>%
+  group_by(PID, day) %>%
+  mutate (esm_stressed_lag = lag(esm_stressed, 1),
+    negemotions_lag = lag(negemotions, 1)
+  ) %>%
+  ungroup()
+ESM_clean <- ESM_test_lag[, c("PID", "day", "Group", "completed", "esm_time_manage","esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated", "negemotions","esm_stressed_lag", "negemotions_lag", "esm_wanted_change", "ER_yes", "distr_yes", "min_yes", "reap_yes", "distr_yes_prompt", "min_yes_prompt","reap_yes_prompt","sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
 write.csv(ESM_clean, "C:/Users/Emotion/Documents/GIT-MW/ECO/ESM_clean.csv")
 ```
 
