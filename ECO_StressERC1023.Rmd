@@ -1,5 +1,5 @@
 ---
-title: "Between- & Within- Person Stress Predicts Emotion Regulation Choice: The Role of Cognitive Resources and Age"
+title: "Between- & Within- Person Stress Predicts Emotion Regulation Initiation: The Role of Cognitive Resources and Age"
 author: "Mengzhe Wei, Tammy English"
 date: "`r Sys.Date()`"
 output:
@@ -11,12 +11,11 @@ output:
 ---
 
 # ECO Stress and ER Choice Analysis
-Notes: Started 17 Oct 2024 by Mengzhe Wei to run analysis looking at ER Decisions and strategy selection based on stress. 
-Within person (level 1): stress level in EMA
+Notes: Started 23 Oct 2024 by Mengzhe Wei to run analysis looking at ER Decisions and strategy selection based on stress. 
+Within person (level 1): stress level in EMA, ER need
 Between person (level 2): MCI status (young, CN, MCI)
 Outcome variables: 
-1. Whether participant chose to influence their emotions; 
-2. the frequency of strategy use
+Whether participant chose to influence their emotions; 
 
 ```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
 # Set up packages and upload data. 
@@ -37,6 +36,8 @@ data <-ESM_clean %>%
   mutate (Group_code = case_when(Group == 0 ~ -1,  Group == 1 ~ 0, Group == 2 ~ 1),
           Group = factor(Group_code, levels = -1:1, labels = c("YA","CN","MCI")),
           stress_pm = mean(esm_stressed,na.rm=TRUE),
+          NA_pm = mean(negemotions, na.rm=TRUE),
+          ER_need_pm = mean(esm_wanted_change, na.rm=TRUE),
           ER_yes_pm = sum(ER_yes,na.rm = TRUE)/ sum(completed==1,na.rm = TRUE),
           distr_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(distr_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
           min_pm = ifelse(sum(ER_yes,na.rm = TRUE) > 0, sum(min_yes,na.rm = TRUE) / sum(ER_yes,na.rm = TRUE), 0),
@@ -46,8 +47,21 @@ data <-ESM_clean %>%
     stress_gmc = scale(esm_stressed, center = T, scale = F),
     stress_w = esm_stressed - stress_pm,
     stress_b = stress_gmc - stress_w,
-    stress_pm_gmc = scale(stress_pm, center = T, scale = F),
+    NA_gmc = scale(negemotions, center = T, scale = F),
+    NA_w = negemotions - NA_pm,
+    NA_b = NA_gmc - NA_w,
+    ER_need_gmc = scale (esm_wanted_change, center = T, scale = F),
     CESD_gmc = scale(CES_D_sum, center = T, scale = F)) %>%
+  group_by(PID,day) %>%
+  mutate(
+    stress_lag_w = lag (stress_w,1),
+    stress_lag_b =lag (stress_b,1),
+    NA_lag_w =lag (NA_w,1),
+    NA_lag_b = lag (NA_b,1),
+    ER_need_lag = lag (esm_wanted_change,1),
+    ER_need_gmc_lag = lag (ER_need_gmc,1)
+  ) %>%
+  ungroup() %>%
   as.data.frame()
 data_b <- data %>%
   group_by(PID) %>%
@@ -58,18 +72,18 @@ data_b <- data %>%
     ER_yes_sum = sum(ER_yes,na.rm = TRUE),
     CES_D_sum = first(CES_D_sum),
     stress_pm = first(stress_pm),
-    stress_pm_gmc = first(stress_pm_gmc),
     ER_yes_pm = first(ER_yes_pm),
+    ER_need_pm = first (ER_need_pm),
+    NA_pm = first(NA_pm),
     distr_pm = first(distr_pm),
     min_pm = first(min_pm),
     reap_pm = first(reap_pm),
     CESD_gmc = first(CESD_gmc)) %>%
   ungroup() %>%
   as.data.frame()
-sum(data_b$ER_yes_sum)
+sum(data_b$ER_yes_sum) # the number of prompts where pt indicated that they've regulated their emotion since the last prompt / 0-1.5 hr ago.
 data$Group <- relevel(data$Group, ref="CN")
-data$Group_code<-as.factor(data$Group_code)
-data$Group_code <- relevel(data$Group_code, ref = "0")
+sum(data$completed == 1 & !is.na(data$esm_stressed_lag)) #data points where we have data for lagged analysis, 5640  is not bad at all
 ```
 
 ### Check internal consistency
@@ -77,14 +91,16 @@ data$Group_code <- relevel(data$Group_code, ref = "0")
 #Check internal consistency
 CESD <- select(survey,CES_D_1:CES_D_20)
 omega(CESD) #alpha=0.93, omega=0.95
+NA.composite <- select (data,c("PID", "esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated") )
+omegaSem(NA.composite, id = "PID")
 ```
 
 ### Data distribution and Descriptive Stats
 ```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=FALSE,warning=FALSE, message=TRUE}
-layout(matrix(1:8, 2,4, byrow=TRUE)); 
+layout(matrix(1:10, 2,5, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
-variables <- c("completed_sum","ER_yes_sum","CES_D_sum", "stress_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
+variables <- c("completed_sum","ER_yes_sum","CES_D_sum", "stress_pm","NA_pm", "ER_need_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
 for (vid in 1:length(variables)) { #vid<-3
   hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
 }
@@ -158,12 +174,12 @@ model_performance(fit0)
 ```
 
 
-## Between-Person Analysis
+## Correlations
 
-### Correlations
+### Lagged; initiation only
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 data$PID<-as.numeric(data$PID)
-stats<-statsBy(select(data,c("PID","Group","esm_stressed","ER_yes","distr_yes","min_yes","reap_yes","CES_D_sum")),group="PID")
+stats<-statsBy(select(data,c("PID","Group","esm_stressed_lag", "negemotions_lag", "ER_need_lag", "ER_yes")),group="PID")
 #between person correlations
 stats$rbg #Between-Person Correlation for Raw Scores
 stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
@@ -228,156 +244,87 @@ print(p_value_matrix)
 
 ## Multilevel Modeling
 
-### Stress predicting overall ER use & each strategy use
-Higher momentary within-person stress is associated with using more ER.
-Higher between-person stress is associated with using more ER.
-At the time of the prompt, higher momentary within-person stress is associated with more ER.
-```{r withinER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-ER <- glmer(ER_yes ~ stress_w + stress_b + Group + 
-                        (1 + stress_w | PID), 
+### Stress predicting overall ER use, lagged
+```{r StressER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+data$Group <- relevel(data$Group, ref="CN")
+ER <- glmer(ER_yes ~ stress_lag_w + stress_lag_b + ER_need_gmc_lag + Group + 
+                        (1 + stress_lag_w | PID), 
                         family = binomial(link = "logit"),
                         data = data)
 summary(ER)
-#increase, both sig
-distr <- glmer(distr_yes ~ stress_w + stress_b + Group + (1 + stress_w | PID), 
-               family = binomial(link = "logit"),
-               data = data,
-               control = glmerControl(optimizer = "bobyqa"))
-summary(distr)
-#increase, both sig    
-min <- glmer(min_yes ~ stress_w + stress_b + Group +(1 + stress_w|PID), 
-             family = binomial(link = "logit"),
-             data = data,
-             control = glmerControl(optimizer = "bobyqa"))
-summary(min)
-#increase, only between sig    
-reap <- glmer(reap_yes ~ stress_w + stress_b + Group + (1 + stress_w|PID), 
-              family = binomial(link = "logit"),
-              data = data,
-              control = glmerControl(optimizer = "bobyqa"))
-summary(reap)
-#increase,both sig 
 ```
 
-### Moderation analysis: overall ER use
-```{r withinER mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-ER <- glmer(ER_yes ~ stress_w*Group + stress_b*Group + 
-              (1 + stress_w | PID), 
+### NA predicting overall ER use, lagged
+```{r NAER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+ER <- glmer(ER_yes ~ NA_lag_w + NA_lag_b + ER_need_gmc_lag + Group + 
+                        (1 + NA_lag_w | PID), 
+                        family = binomial(link = "logit"),
+                        data = data)
+summary(ER)
+```
+
+### Moderation analysis: Group (level 2)
+```{r Group mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + 
+              (1 + stress_lag_w | PID), 
             family = binomial(link = "logit"),
             data = data,
             control = glmerControl(optimizer = "bobyqa"))
 summary(ER) 
-#CN older adults increases ER more when they are more stressed than normal
-ef <- effects::effect(term="stress_w:Group", mod=ER)
+
+#Younger adults initiate less ER compared to CN older adults when experiencing more stress than normal
+
+ef <- effects::effect(term="stress_lag_w:Group", mod=ER)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
 efdata$Group<-as.factor(efdata$Group)
-g0w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
+g0w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=Group,group=Group)) +
+    geom_point() +
     geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_w", y="ER Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) +
+    labs(x= "stress_lag_w", y="ER Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) +
+    scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
+    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
+
+ER <- glmer(ER_yes ~ NA_lag_w*Group + NA_lag_b*Group + 
+              (1 + NA_lag_w | PID), 
+            family = binomial(link = "logit"),
+            data = data,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER) 
+#same finding
+ef <- effects::effect(term="NA_lag_w:Group", mod=ER)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$Group<-as.factor(efdata$Group)
+g1w<-ggplot(efdata, aes(x=NA_lag_w, y=fit, color=Group,group=Group)) +
+    geom_point() +
+    geom_line(size=1.2) +
+    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) +
+    labs(x= "NA_lag_w", y="ER Use", color="Group", fill="Group") +
+    theme_classic() + theme(text=element_text(size=12)) +
     scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
     scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
 ```
 
-### Moderation analysis: specific ER use
-```{r withinER strategy mod,echo=TRUE,eval=TRUE,fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
-#Group
-distr <- glmer(distr_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID), 
-                        family = binomial(link = "logit"),
-                        data = data,
-              control = glmerControl(optimizer = "bobyqa"))
-summary(distr)
-# CN and MCI both increases distraction use when they are experiencing stress more than normal
-# CN increases distraction use more when they are experiencing stress in general 
-ef <- effects::effect(term="stress_w:Group", mod=distr)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g1w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_w", y="Distraction Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.2, by=0.05), limits=c(0,0.2)) +
-    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-ef <- effects::effect(term="Group:stress_b", mod=distr)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g1b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_b", y="Distraction Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.9, by=0.2), limits=c(0,0.9)) +
-    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+### Moderation analysis: ER need (level 1)
+```{r Need mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+ER <- glmer(ER_yes ~ stress_lag_w*ER_need_gmc_lag + stress_lag_b*ER_need_gmc_lag + 
+              (1 + stress_lag_w | PID), 
+            family = binomial(link = "logit"),
+            data = data,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER) 
 
-min <- glmer(min_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID),
-                        family = binomial(link = "logit"),
-                        data = data,
-              control = glmerControl(optimizer = "bobyqa"))
-summary(min)
-# MCI increases minimizing use when they are experiencing stress more than normal
-# CN increases minimizing use more when they are experiencing stress in general
-ef <- effects::effect(term="stress_w:Group", mod=min)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g2w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_w", y="Minimizing Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
-    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-ef <- effects::effect(term="Group:stress_b", mod=min)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g2b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_b", y="Minimizing Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.6, by=0.1), limits=c(-0.02,0.6)) +
-    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
-
-reap <- glmer(reap_yes ~ stress_w*Group + stress_b*Group + (1 + stress_w | PID), 
-                        family = binomial(link = "logit"),
-                        data = data,
-              control = glmerControl(optimizer = "bobyqa"))
-summary(reap)
-# CN & MCI increases reappraisal use when they are experiencing stress more than normal
-# CN increases reappraisal use more when they are experiencing stress in general
-ef <- effects::effect(term="stress_w:Group", mod=reap)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g3w<-ggplot(efdata, aes(x=stress_w, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_w", y="Reappraisal Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.25, by=0.05), limits=c(0,0.25)) +
-    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-ef <- effects::effect(term="Group:stress_b", mod=reap)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g3b<-ggplot(efdata, aes(x=stress_b, y=fit, color=Group,group=Group)) + 
-    geom_point() + 
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) + 
-    labs(x= "stress_b", y="Reappraisal Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) + 
-    scale_y_continuous(breaks = seq(0, 0.8, by=0.1), limits=c(-0.02,0.8)) +
-    scale_x_continuous(breaks = seq(-1.5, 4, by=1), limits=c(-1.5, 4))
+ER <- glmer(ER_yes ~ NA_lag_w*ER_need_gmc_lag + NA_lag_b*ER_need_gmc_lag + 
+              (1 + NA_lag_w | PID), 
+            family = binomial(link = "logit"),
+            data = data,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER) 
 ```
+
 
 ### Moderation Visualization
 ```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
-grid.arrange(g0w,ncol=1)
-grid.arrange(g1w, g2w, g3w, ncol=2) 
-grid.arrange(g1b, g2b, g3b,ncol=2) 
+grid.arrange(g0w,g1w, ncol=2)
 ```
