@@ -95,6 +95,9 @@ sum(data_b$ER_yes_sum) # the number of prompts where pt indicated that they've r
 data$Group <- relevel(data$Group, ref="CN")
 sum(data$completed == 1 & !is.na(data$esm_stressed_lag)) #data points where we have data for lagged analysis, 5640  is not bad at all
 summary(data_b$consecutive_sum)
+data_b$PID[data_b$consecutive_sum <= 5]
+test <- data_b[data_b$consecutive_sum >= 5, ]
+table(test$Group)
 ```
 
 ### Check internal consistency
@@ -108,10 +111,10 @@ omegaSem(NA.composite, id = "PID")
 
 ### Data distribution and Descriptive Stats
 ```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=FALSE,warning=FALSE, message=TRUE}
-layout(matrix(1:10, 2,5, byrow=TRUE)); 
+layout(matrix(1:12, 3,4, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
-variables <- c("completed_sum","ER_yes_sum","CES_D_sum", "stress_pm","NA_pm", "ER_need_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
+variables <- c("completed_sum","consecutive_sum", "ER_yes_sum","CES_D_sum", "stress_pm","NA_pm", "ER_need_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
 for (vid in 1:length(variables)) { #vid<-3
   hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
 }
@@ -120,6 +123,12 @@ par(mfrow = c(1, 1))
 describe(data_b)
 length(which(data_b$CES_D_sum>=16))
 # 67 participants met the cutoff for significant depressive symptomatology
+ggplot(data_b, aes(x = consecutive_sum, fill = Group)) + 
+  geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
+  labs(x = "consecutive_sum", y = "Frequency", title = "Histogram by Group") +
+  theme_classic() +
+  facet_wrap(~ Group) +  # Create separate plots for each group
+  scale_fill_brewer(palette = "Set1")  # Optional: Use a color palette
 ```
 
 ### Demographics
@@ -270,7 +279,13 @@ summary(ER)
 control <- lmer(stress_w~control_w+(1+control_w|PID),data=data)
 summary(control)
 
-ER <- glmer(ER_yes ~ stress_lag_w*control_lag_w +  (1 + stress_lag_w + + control_lag_w | PID), 
+control_ER <-glmer(ER_yes ~ control_lag_w +  control_lag_b + (1 + control_lag_w | PID), 
+            family = binomial(link = "logit"),
+            data = data,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(control_ER)
+
+ER <- glmer(ER_yes ~ stress_lag_w*control_lag_w +  (1 + stress_lag_w + control_lag_w | PID), 
             family = binomial(link = "logit"),
             data = data,
             control = glmerControl(optimizer = "bobyqa"))
