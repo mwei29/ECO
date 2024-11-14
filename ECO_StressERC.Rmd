@@ -178,7 +178,7 @@ ESM_test_lag <- ESM_test %>%
     control_lag = lag(situation_control,1),
   ) %>%
   ungroup()
-ESM_clean <- ESM_test_lag[, c("PID", "day", "Group", "completed", "esm_time_manage","esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated", "negemotions","esm_stressed_lag", "negemotions_lag","situation_control","control_lag", "esm_wanted_change", "ER_yes", "distr_yes", "min_yes", "reap_yes", "distr_yes_prompt", "min_yes_prompt","reap_yes_prompt","sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
+ESM_clean <- ESM_test_lag[, c("PID", "day", "Group", "completed", "start_date",  "esm_time_manage","esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated", "negemotions","esm_stressed_lag", "negemotions_lag","situation_control","control_lag", "esm_wanted_change", "ER_yes", "distr_yes", "min_yes", "reap_yes", "distr_yes_prompt", "min_yes_prompt","reap_yes_prompt","sd.cogflu.uc", "perceived_stress_sum", "CES_D_sum", "dweck.sum", "Gender", "Age", "Race2_1", "Race2_2", "Race2_3", "Race2_4", "Race2_5", "Race2_6", "Race2_7")]
 write.csv(ESM_clean, "C:/Users/Emotion/Documents/GIT-MW/ECO/ESM_clean.csv")
 ```
 
