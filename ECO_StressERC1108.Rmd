@@ -1,6 +1,6 @@
 ---
-title: "Between- & Within- Person Stress Predicts Emotion Regulation Initiation: The Role of Cognitive Resources and Age"
-author: "Mengzhe Wei, Tammy English"
+title: "Between- & Within- Person Stress Predicts Emotion Regulation Initiation: The Role of controllability and Cognitive Resource"
+author: "Mengzhe Wei, Angie Gross, Tammy English"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -11,17 +11,17 @@ output:
 ---
 
 # ECO Stress and ER Choice Analysis
-Notes: Started 23 Oct 2024 by Mengzhe Wei to run analysis looking at ER Decisions and strategy selection based on stress. 
-Within person (level 1): stress level in EMA, ER need
+Notes: Started 08 Nov 2024 by Mengzhe Wei to run analysis looking at ER Initiation based on stress.
+Within person (level 1): stress level in EMA, controllability
 Between person (level 2): MCI status (young, CN, MCI)
 Outcome variables: 
-Whether participant chose to influence their emotions; 
+Whether participant chose to initiate ER
 
 ```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE}
 # Set up packages and upload data. 
 rm(list=ls());
 options(warnPartialMatchDollar=TRUE);   # safety option
-library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table);library(lmerTest);library(performance);library(car);library(gridExtra);library(glmmTMB)
+library(lubridate); library(lme4); library(knitr); library(RColorBrewer); library (kableExtra);library(correlation); library(tidyverse); library(psych); library(data.table);library(lmerTest);library(performance);library(car);library(gridExtra);library(glmmTMB); library(parameters)
 ```
 
 ## Data Quality Check
@@ -57,7 +57,7 @@ data <-ESM_clean %>%
     ER_need_gmc = scale (esm_wanted_change, center = T, scale = F),
     ER_need_w = esm_wanted_change -ER_need_pm,
     ER_need_b = ER_need_gmc - ER_need_w,
-    CESD_gmc = scale(CES_D_sum, center = T, scale = F)) %>%
+    CESD_gmc = scale(CES_D_sum, center = T, scale = F))%>%
   group_by(PID,day) %>%
   mutate(
     stress_lag_w = lag (stress_w,1),
@@ -85,6 +85,7 @@ data_b <- data %>%
     stress_pm = first(stress_pm),
     ER_yes_pm = first(ER_yes_pm),
     ER_need_pm = first (ER_need_pm),
+    control_pm = first (control_pm),
     NA_pm = first(NA_pm),
     distr_pm = first(distr_pm),
     min_pm = first(min_pm),
@@ -94,43 +95,45 @@ data_b <- data %>%
   ungroup() %>%
   as.data.frame()
 sum(data_b$ER_yes_sum) # the number of prompts where pt indicated that they've regulated their emotion since the last prompt / 0-1.5 hr ago.
-data$Group <- relevel(data$Group, ref="CN")
+data$Group <- relevel(data$Group, ref="MCI")
 sum(data$completed == 1 & !is.na(data$esm_stressed_lag)) #data points where we have data for lagged analysis, 5640  is not bad at all
 summary(data_b$consecutive_sum)
 exclude_PIDs<-data_b$PID[data_b$consecutive_sum <= 5] #excluding 28 pts in this criteria; exlucding 6 in YA, 9 in CN, 13 in MCI
 length(exclude_PIDs)
-test <- data_b[data_b$consecutive_sum > 5, ]
-table(test$Group)
+data_b_exclude <- data_b[!data_b$PID %in% exclude_PIDs,]
+table(data_b_exclude$Group)
 table(data_b$Group)
 data_exclude<-data[!data$PID %in% exclude_PIDs,]
-unique(data_exclude$PID)
-#Get rid of MCI?
+#Deal with the time variable
+str(data_exclude$start_date)
+df <- plyr::ddply(data_exclude, "PID", summarise,
+                  startdate = min(start_date, na.rm = TRUE))
+data_exclude <- left_join(data_exclude, df, by = "PID")
+data_exclude$time0<- as.numeric(difftime(data_exclude$start_date, data_exclude$startdate, units = "secs"))
+data_exclude$time0m <- data_exclude$time0 / 100000
 ```
 
 ### Check internal consistency
 ```{r Internal consistency, eval=TRUE, echo=TRUE, cache=FALSE, warning=FALSE, message=FALSE}
-#Check internal consistency
-CESD <- select(survey,CES_D_1:CES_D_20)
-omega(CESD) #alpha=0.93, omega=0.95
-NA.composite <- select (data,c("PID", "esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated") )
+NA.composite <- select (data_exclude,c("PID", "esm_stressed","esm_lonely","esm_angry","esm_nervous","esm_fearful","esm_sad","esm_disgusted","esm_sluggish","esm_bored","esm_isolated") )
 omegaSem(NA.composite, id = "PID")
 ```
 
 ### Data distribution and Descriptive Stats
 ```{r distribution,fig.width=10, fig.height=6, eval=TRUE, echo=TRUE, cache=FALSE,warning=FALSE, message=TRUE}
-layout(matrix(1:12, 3,4, byrow=TRUE)); 
+layout(matrix(1:8, 2,4, byrow=TRUE)); 
 par(mar = c(2, 2, 2, 1), mgp = c(1.1, 0.2, 0), tcl = -0.3)
 #Check distribution of all data; loop through histogram
-variables <- c("completed_sum","consecutive_sum", "ER_yes_sum","CES_D_sum", "stress_pm","NA_pm", "ER_need_pm", "ER_yes_pm","distr_pm", "min_pm","reap_pm")
+variables <- c("completed_sum","consecutive_sum", "ER_yes_sum","CES_D_sum", "stress_pm","NA_pm", "control_pm", "ER_yes_pm")
 for (vid in 1:length(variables)) { #vid<-3
-  hist(data_b[[variables[vid]]], breaks = 20, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
+  hist(data_b_exclude[[variables[vid]]], breaks = 10, border = "black",main = variables[vid], xlab = variables[vid], ylab = "Count")
 }
 par(mfrow = c(1, 1))
 # Overall stats including centered variables
-describe(data_b)
-length(which(data_b$CES_D_sum>=16))
+describe(data_b_exclude)
+length(which(data_b_exclude$CES_D_sum>=16))
 # 67 participants met the cutoff for significant depressive symptomatology
-ggplot(data_b, aes(x = consecutive_sum, fill = Group)) + 
+ggplot(data_b_exclude, aes(x = consecutive_sum, fill = Group)) + 
   geom_histogram(position = "identity", alpha = 0.5, bins = 30) +
   labs(x = "consecutive_sum", y = "Frequency", title = "Histogram by Group") +
   theme_classic() +
@@ -141,7 +144,7 @@ ggplot(data_b, aes(x = consecutive_sum, fill = Group)) +
 ### Demographics
 ```{r Demo, eval=TRUE, echo=TRUE,cache=FALSE, warning=FALSE, message=FALSE}
 #Demo table
-demo.sum <- data %>% distinct(PID, .keep_all=TRUE) %>%
+demo.sum <- data_exclude %>% distinct(PID, .keep_all=TRUE) %>%
   select(PID, Group, Race2_1, Race2_2, Race2_3, Race2_4, Race2_5, Race2_6, Race2_7, 
          Gender, Age)
 #Group, 0=young adult, 1=CN older adults, 2=MCI older adult
@@ -183,19 +186,10 @@ demo.sum %>%
 
 ### intraclass correlations of EMA items
 ```{r EMA cor, echo=TRUE,eval=TRUE,cache=FALSE,warning=F, message=F}
-fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
+fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data_exclude, family = binomial(link = "logit"))
 model_performance(fit_logit) 
 #ICC = .463,54% variance is within person
-fit_logit <- glmer(distr_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
-model_performance(fit_logit) 
-#ICC = 0.464,54% variance is within person
-fit_logit <- glmer(min_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
-model_performance(fit_logit) 
-#ICC = 0.435
-fit_logit <- glmer(reap_yes ~ 1 + (1 | PID), data = data, family = binomial(link = "logit"))
-model_performance(fit_logit) 
-#ICC = 0.48
-fit0 <- glmer(esm_stressed ~ 1 + (1 | PID), data = data)
+fit0 <- glmer(esm_stressed ~ 1 + (1 | PID), data = data_exclude)
 model_performance(fit0) 
 #ICC = 0.408, 59% variance is within person
 ```
@@ -205,129 +199,74 @@ model_performance(fit0)
 
 ### Lagged; initiation only
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-data$PID<-as.numeric(data$PID)
-stats<-statsBy(select(data,c("PID","Group","esm_stressed_lag", "negemotions_lag", "ER_need_lag", "ER_yes")),group="PID")
+data_exclude$PID<-as.numeric(data_exclude$PID)
+stats<-statsBy(select(data_exclude,c("PID","Group","esm_stressed_lag", "control_lag", "ER_yes")),group="PID")
 #between person correlations
 stats$rbg #Between-Person Correlation for Raw Scores
 stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
 #within person correlations
 stats$rwg #Within-Person Correlation for Raw Scores
 stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
-
-within_person_correlations <- stats$rwg
-# Extract the variable names
-var_names <- colnames(within_person_correlations)
-# Initialize an empty matrix to store p-values
-p_value_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names))
-rownames(p_value_matrix) <- var_names
-colnames(p_value_matrix) <- var_names
-# Loop through variable pairs and calculate p-values using cor.test
-for (i in 1:length(var_names)) {
-  for (j in 1:length(var_names)) {
-    if (i != j) {  # Avoid calculating for the same variable
-      # Handle missing values using na.omit
-      valid_data <- na.omit(within_person_correlations[, c(i, j)])
-      
-      # Only run cor.test if enough valid data is available
-      if (nrow(valid_data) > 2) {  # cor.test requires at least 3 observations
-        cor_test_result <- cor.test(valid_data[, 1], valid_data[, 2])
-        p_value_matrix[i, j] <- cor_test_result$p.value
-      } else {
-        p_value_matrix[i, j] <- NA  # Not enough data to calculate p-value
-      }
-    }
-  }
-}
-# View the p-value matrix
-print(p_value_matrix)
-
-between_person_correlations <- stats$rbg
-# Extract the variable names
-var_names <- colnames(between_person_correlations)
-# Initialize an empty matrix to store p-values
-p_value_matrix <- matrix(NA, nrow = length(var_names), ncol = length(var_names))
-rownames(p_value_matrix) <- var_names
-colnames(p_value_matrix) <- var_names
-# Loop through variable pairs and calculate p-values using cor.test
-for (i in 1:length(var_names)) {
-  for (j in 1:length(var_names)) {
-    if (i != j) {  # Avoid calculating for the same variable
-      # Handle missing values using na.omit
-      valid_data <- na.omit(between_person_correlations[, c(i, j)])
-      
-      # Only run cor.test if enough valid data is available
-      if (nrow(valid_data) > 2) {  # cor.test requires at least 3 observations
-        cor_test_result <- cor.test(valid_data[, 1], valid_data[, 2])
-        p_value_matrix[i, j] <- cor_test_result$p.value
-      } else {
-        p_value_matrix[i, j] <- NA  # Not enough data to calculate p-value
-      }
-    }
-  }
-}
-# View the p-value matrix
-print(p_value_matrix)
 ```
 
 ## Multilevel Modeling
 
-### Stress predicting overall ER use, lagged
+### Main Effect: Stress predicting overall ER use, lagged
 ```{r StressER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-data_exclude$Group <- relevel(data_exclude$Group, ref="YA")
-ER <- glmer(ER_yes ~ stress_lag_w + stress_lag_b + Group + 
-                        (1 + stress_lag_w | PID), 
-                        family = binomial(link = "logit"),
-                        data = data_exclude)
+data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
+ER <- glmer(ER_yes ~ stress_lag_w + stress_lag_b + control_lag_w + control_lag_b + 
+              Group + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude)
 summary(ER)
+#As hypothesized, both within & between person stress increase the chance of ER initiation
+#Within person control decreases the chance of ER initiation
+
+#Odd ratio
+model_parameters(ER, CI = 0.95, ci_method = "wald", ci_random = NULL, bootstrap = FALSE, iterations = 1000,
+
+                 standardize = NULL, effects = "all", component = "all", group_level = FALSE,exponentiate = TRUE, p_adjust = NULL,
+
+                 wb_component = TRUE, summary = getOption("parameters_mixed_summary", FALSE), keep = NULL, drop = NULL,
+
+verbose = TRUE)
+#Within person stress is associated with an 11% increase in the odds of initiating ER
+#Between person stress is associated with an 64% increase in the odds of initiating ER
+#Within person controllability is associated with an 6% decrease in the odds of initiating ER
 ```
 
-### Control predicting stress & control as a moderator
-```{r NAER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-control <- lmer(stress_w~control_w+(1+control_w|PID),data=data_exclude)
-summary(control)
-
-control_ER <-glmer(ER_yes ~ control_lag_w +  control_lag_b + (1 + control_lag_w | PID), 
+### control as a moderator
+```{r controlER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+control_ER <-glmer(ER_yes ~ control_lag_w*stress_lag_w +  control_lag_b*stress_lag_w + stress_lag_b + time0m + Group + (1 + time0m | PID), 
             family = binomial(link = "logit"),
             data = data_exclude,
             control = glmerControl(optimizer = "bobyqa"))
 summary(control_ER)
-
-#adding in timing of the prompt
-control_ER <-glmer(ER_yes ~ control_lag_w +  stress_lag_w + control_lag_b + stress_lag_b + (1 + control_lag_w + stress_lag_w | PID), 
-            family = binomial(link = "logit"),
-            data = data_exclude,
-            control = glmerControl(optimizer = "bobyqa"))
-summary(control_ER)
-
-ER <- glmer(ER_yes ~ stress_lag_w*control_lag_w +  (1 + stress_lag_w + control_lag_w | PID), 
-            family = binomial(link = "logit"),
-            data = data_exclude,
-            control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
+#N.S.
 ```
 
-### NA predicting overall ER use, lagged
-```{r NAER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-ER <- glmer(ER_yes ~ stress_lag_w+ stress_lag_b+NA_lag_w + NA_lag_b + Group + 
-                        (1 + NA_lag_w | PID), 
-                        family = binomial(link = "logit"),
-                        data = data_exclude)
-summary(ER)
-
-#NA itself is significant, but when stress and NA are in the same model, only stress is significant
-```
-
-### Moderation analysis: Group (level 2)
-```{r Group mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + 
-              (1 + stress_lag_w | PID), 
+### Group as a moderator
+```{r GroupER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
+#I find this model to be very complicated
+ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + control_lag_w + control_lag_b + time0m +
+              (1 + time0m | PID), 
             family = binomial(link = "logit"),
             data = data_exclude,
             control = glmerControl(optimizer = "bobyqa"))
 summary(ER) 
 
-#Younger adults initiate less ER compared to CN older adults when experiencing more stress than normal
+ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m +
+              (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER) 
 
+#Younger adults initiate less ER compared to MCI adults in the simpler model, but not the model where everything's included.
+
+```
+
+```{r mod graphs, echo=FALSE, eval=FALSE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
 ef <- effects::effect(term="stress_lag_w:Group", mod=ER)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
 efdata$Group<-as.factor(efdata$Group)
@@ -339,46 +278,5 @@ g0w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=Group,group=Group)) +
     theme_classic() + theme(text=element_text(size=12)) +
     scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
     scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-
-ER <- glmer(ER_yes ~ NA_lag_w*Group + NA_lag_b*Group + 
-              (1 + NA_lag_w | PID), 
-            family = binomial(link = "logit"),
-            data = data_exclude,
-            control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
-#same finding
-ef <- effects::effect(term="NA_lag_w:Group", mod=ER)
-efdata<-as.data.frame(ef) #convert the effects list to a data frame
-efdata$Group<-as.factor(efdata$Group)
-g1w<-ggplot(efdata, aes(x=NA_lag_w, y=fit, color=Group,group=Group)) +
-    geom_point() +
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) +
-    labs(x= "NA_lag_w", y="ER Use", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) +
-    scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
-    scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-```
-
-### Moderation analysis: ER need (level 1)
-```{r Need mod,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-ER <- glmer(ER_yes ~ stress_lag_w*ER_need_gmc_lag + stress_lag_b*ER_need_gmc_lag + 
-              (1 + stress_lag_w | PID), 
-            family = binomial(link = "logit"),
-            data = data,
-            control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
-
-ER <- glmer(ER_yes ~ NA_lag_w*ER_need_gmc_lag + NA_lag_b*ER_need_gmc_lag + 
-              (1 + NA_lag_w | PID), 
-            family = binomial(link = "logit"),
-            data = data,
-            control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
-```
-
-
-### Moderation Visualization
-```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
 grid.arrange(g0w,g1w, ncol=2)
 ```
