@@ -247,27 +247,35 @@ summary(control_ER)
 
 ### Group as a moderator
 ```{r GroupER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
-#I find this model to be very complicated
-ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + control_lag_w + control_lag_b + time0m +
+data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
+ER_MCI <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m +
               (1 + time0m | PID), 
             family = binomial(link = "logit"),
             data = data_exclude,
             control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
+summary(ER_MCI) 
 
-ER <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m +
+data_exclude$Group <- relevel(data_exclude$Group, ref="YA")
+ER_YA <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m +
               (1 + time0m | PID), 
             family = binomial(link = "logit"),
             data = data_exclude,
             control = glmerControl(optimizer = "bobyqa"))
-summary(ER) 
+summary(ER_YA) 
 
+data_exclude$Group <- relevel(data_exclude$Group, ref="CN")
+ER_CN <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m +
+              (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER_CN) 
 #Younger adults initiate less ER compared to MCI adults in the simpler model, but not the model where everything's included.
 
 ```
 
-```{r mod graphs, echo=FALSE, eval=FALSE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
-ef <- effects::effect(term="stress_lag_w:Group", mod=ER)
+```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=FALSE, message=F}
+ef <- effects::effect(term="stress_lag_w:Group", mod=ER_MCI)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
 efdata$Group<-as.factor(efdata$Group)
 g0w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=Group,group=Group)) +
@@ -278,5 +286,6 @@ g0w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=Group,group=Group)) +
     theme_classic() + theme(text=element_text(size=12)) +
     scale_y_continuous(breaks = seq(0, 1, by=0.2), limits=c(0,1)) +
     scale_x_continuous(breaks = seq(-5.5, 6, by=2), limits=c(-5.5, 6))
-grid.arrange(g0w,g1w, ncol=2)
+g0w
+#grid.arrange(g0w,g1w, ncol=2)
 ```
