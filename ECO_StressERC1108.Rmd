@@ -189,9 +189,11 @@ demo.sum %>%
 fit_logit <- glmer(ER_yes ~ 1 + (1 | PID), data = data_exclude, family = binomial(link = "logit"))
 model_performance(fit_logit) 
 #ICC = .463,54% variance is within person
-fit0 <- glmer(esm_stressed ~ 1 + (1 | PID), data = data_exclude)
+fit0 <- glmer(esm_stressed_lag ~ 1 + (1 | PID), data = data_exclude)
 model_performance(fit0) 
 #ICC = 0.408, 59% variance is within person
+fit0 <- glmer(control_lag ~ 1 + (1 | PID), data = data_exclude)
+model_performance(fit0)
 ```
 
 
