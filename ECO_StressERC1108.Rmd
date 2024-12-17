@@ -84,6 +84,7 @@ data_b <- data %>%
     Group_code=first(Group_code),
     Group = first(Group),  # Assuming all entries of a single group per PID are the same
     completed_sum = sum(completed==1,na.rm = TRUE),
+    completed_rate = completed_sum/63, 
     ER_yes_sum = sum(ER_yes,na.rm = TRUE),
     CES_D_sum = first(CES_D_sum),
     stress_pm = first(stress_pm),
@@ -110,7 +111,11 @@ data$time0m <- data$time0 / 100000
 #Look at quality for lagged analysis
 sum(data$completed == 1 & !is.na(data$esm_stressed_lag)) #data points where we have data for lagged analysis, 5640  is not bad at all
 summary(data_b$consecutive_sum)
-exclude_PIDs<-data_b$PID[data_b$consecutive_sum <= 5] #excluding 28 pts in this criteria; exlucding 6 in YA, 9 in CN, 13 in MCI
+exclude_PIDs<-data_b$PID[data_b$consecutive_sum <= 2] #excluding 28 pts in this criteria; exlucding 6 in YA, 9 in CN, 13 in MCI #I changed in to 3 so the stats changed
+data_b %>%
+  group_by(Group) %>%
+  summarise(Summary = list(summary(completed_rate))) %>%
+  unnest_wider(Summary)
 length(exclude_PIDs)
 data_b_exclude <- data_b[!data_b$PID %in% exclude_PIDs,]
 table(data_b_exclude$Group)
@@ -268,7 +273,7 @@ summary(control_ER)
 ### Group as a moderator
 ```{r GroupER,echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
-ER_MCI <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + time0m + 
+ER_MCI <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + control_lag_b + time0m + 
               (1 + time0m | PID), 
             family = binomial(link = "logit"),
             data = data_exclude,
