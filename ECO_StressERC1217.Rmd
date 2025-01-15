@@ -145,6 +145,17 @@ data_exclude %>%
 #Race
 data_exclude %>%
   distinct(PID, .keep_all=TRUE) %>%
+  summarise(
+    African_American_Black = mean(Race2_1), 
+    American_Indian_Alaskan_Native = mean(Race2_2),
+    Asian_Asian_American_Pacific_Islander = mean(Race2_3),
+    Middle_Eastern_Arab_American = mean(Race2_4),
+    Caucasian_European_American = mean(Race2_5),
+    Hispanic_Latino = mean(Race2_6),
+    Other = mean(Race2_7)
+  )
+data_exclude %>%
+  distinct(PID, .keep_all=TRUE) %>%
   group_by(Group) %>%
   summarise(
     African_American_Black = mean(Race2_1), 
@@ -174,6 +185,12 @@ data_exclude %>%
     min_age=min(Age),
     max_age=max(Age)
   )
+data_b_exclude %>%
+  group_by(Group) %>%
+  summarise(mean_completed_rate=mean(completed_rate),
+    sd_completed_rate=sd(completed_rate),
+    min_completed_rate=min(completed_rate),
+    max_completed_rate=max(completed_rate))
 ```
 
 ### intraclass correlations of EMA items
@@ -194,7 +211,7 @@ model_performance(fit0)
 ### Lagged; initiation only
 ```{r cor, echo=TRUE,eval=TRUE,warning=F, cache=FALSE, message=F}
 data_exclude$PID<-as.numeric(data_exclude$PID)
-stats<-statsBy(select(data_exclude,c("PID","Group","esm_stressed_lag", "control_lag", "ER_yes","gender_bin","edu_bin","SF36.PCS")),group="PID")
+stats<-statsBy(select(data_exclude,c("PID","Group","esm_stressed_lag", "control_lag", "ER_yes")),group="PID")
 #between person correlations
 stats$rbg #Between-Person Correlation for Raw Scores
 stats$pbg #Between-Person Correlation for Person-Mean Centered Scores
