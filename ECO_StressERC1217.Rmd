@@ -117,7 +117,9 @@ for (vid in 1:length(variables)) { #vid<-3
 }
 par(mfrow = c(1, 1))
 # Overall stats including centered variables
-describe(data_b_exclude%>% select(-PID, -Group))
+describe(data_b_exclude%>% filter(Group == "YA") %>% select(-PID, -Group))
+describe(data_b_exclude%>% filter(Group == "CN") %>% select(-PID, -Group))
+describe(data_b_exclude%>% filter(Group == "MCI") %>% select(-PID, -Group))
 describe(data_exclude %>% select(completed,esm_stressed,situation_control,ER_yes,Group_code,gender_bin,edu_bin,stress_pm,control_pm,ER_yes_pm,stress_w,stress_b,control_w,control_b,SF36.PCS_gmc,consecutive_sum))
 ```
 
@@ -130,10 +132,15 @@ data_exclude %>%
 #Checking demo bins - gender, education, and health
 data_exclude %>%
   distinct(PID, Group, gender_bin) %>%
-  count(Group, gender_bin)
+  count(Group, gender_bin) %>%
+  group_by(Group) %>%
+  mutate(percentage = round(100 * n / sum(n), 1))
 data_exclude %>%
   distinct(PID, Group, edu_bin) %>%
   count(Group, edu_bin)
+data_exclude %>%
+  distinct(PID, Group, Education) %>%
+  count(Group, Education)
 data_exclude %>%
   distinct(PID, Group, SF36.PCS) %>%
   group_by(Group) %>%
@@ -144,28 +151,35 @@ data_exclude %>%
   )
 #Race
 data_exclude %>%
-  distinct(PID, .keep_all=TRUE) %>%
-  summarise(
-    African_American_Black = mean(Race2_1), 
-    American_Indian_Alaskan_Native = mean(Race2_2),
-    Asian_Asian_American_Pacific_Islander = mean(Race2_3),
-    Middle_Eastern_Arab_American = mean(Race2_4),
-    Caucasian_European_American = mean(Race2_5),
-    Hispanic_Latino = mean(Race2_6),
-    Other = mean(Race2_7)
-  )
-data_exclude %>%
-  distinct(PID, .keep_all=TRUE) %>%
+  distinct(PID, .keep_all = TRUE) %>%
   group_by(Group) %>%
   summarise(
-    African_American_Black = mean(Race2_1), 
-    American_Indian_Alaskan_Native = mean(Race2_2),
-    Asian_Asian_American_Pacific_Islander = mean(Race2_3),
-    Middle_Eastern_Arab_American = mean(Race2_4),
-    Caucasian_European_American = mean(Race2_5),
-    Hispanic_Latino = mean(Race2_6),
-    Other = mean(Race2_7)
+    n = n(),
+    African_American_Black_pct = round(mean(Race2_1, na.rm = TRUE) * 100, 1),
+    African_American_Black_count = sum(Race2_1, na.rm = TRUE),
+    
+    American_Indian_Alaskan_Native_pct = round(mean(Race2_2, na.rm = TRUE) * 100, 1),
+    American_Indian_Alaskan_Native_count = sum(Race2_2, na.rm = TRUE),
+    
+    Asian_Asian_American_Pacific_Islander_pct = round(mean(Race2_3, na.rm = TRUE) * 100, 1),
+    Asian_Asian_American_Pacific_Islander_count = sum(Race2_3, na.rm = TRUE),
+    
+    Middle_Eastern_Arab_American_pct = round(mean(Race2_4, na.rm = TRUE) * 100, 1),
+    Middle_Eastern_Arab_American_count = sum(Race2_4, na.rm = TRUE),
+    
+    Caucasian_European_American_pct = round(mean(Race2_5, na.rm = TRUE) * 100, 1),
+    Caucasian_European_American_count = sum(Race2_5, na.rm = TRUE),
+    
+    Hispanic_Latino_pct = round(mean(Race2_6, na.rm = TRUE) * 100, 1),
+    Hispanic_Latino_count = sum(Race2_6, na.rm = TRUE),
+    
+    Other_pct = round(mean(Race2_7, na.rm = TRUE) * 100, 1),
+    Other_count = sum(Race2_7, na.rm = TRUE)
   )
+data_exclude %>%
+  distinct(PID, .keep_all = TRUE) %>%
+  mutate(n_races_selected = rowSums(select(., starts_with("Race2_")), na.rm = TRUE)) %>%
+  count(n_races_selected)
 #Age
 data_exclude %>%
   distinct(PID, .keep_all=TRUE) %>%
@@ -191,6 +205,18 @@ data_b_exclude %>%
     sd_completed_rate=sd(completed_rate),
     min_completed_rate=min(completed_rate),
     max_completed_rate=max(completed_rate))
+
+df_unique <- data_exclude %>%
+  distinct(PID, gender_bin, edu_bin, SF36.PCS, Group) 
+table_gender_group <- table(df_unique$gender_bin, df_unique$Group)
+table_gender_group <- table_gender_group[1:2,]
+chisq.test(table_gender_group)
+table_edu_group <- table(df_unique$edu_bin, df_unique$Group)
+chisq.test(table_edu_group)
+anova_result <- aov(SF36.PCS ~ Group, data = df_unique)
+summary(anova_result)
+library(effectsize)
+eta_squared(anova_result)
 ```
 
 ### intraclass correlations of EMA items
@@ -306,21 +332,67 @@ model_parameters(ER_CN, CI = 0.95, ci_method = "wald", ci_random = NULL, bootstr
                  wb_component = TRUE, summary = getOption("parameters_mixed_summary", FALSE), keep = NULL, drop = NULL,
 
 verbose = TRUE)
+
+CN_test <- data_exclude %>%
+  filter (Group=="CN")
+CN_test_model <- glmer(ER_yes ~ stress_lag_w+ stress_lag_b + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = CN_test,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(CN_test_model)  #b = 0.153
+MCI_test <- data_exclude %>%
+  filter (Group=="MCI")
+MCI_test_model <- glmer(ER_yes ~ stress_lag_w+ stress_lag_b + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = MCI_test,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(MCI_test_model)  #b=0.19
+YA_test <- data_exclude %>%
+  filter (Group=="YA")
+YA_test_model <- glmer(ER_yes ~ stress_lag_w+ stress_lag_b + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = YA_test,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(YA_test_model) #b=0.05
 ```
 
+### Graph
 ```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=T, message=F}
 ef <- effects::effect(term="stress_lag_w:Group", mod=ER_MCI)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
 efdata$Group<-as.factor(efdata$Group)
 g0w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=Group,group=Group)) +
-    geom_point() +
-    geom_line(size=1.2) +
-    geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) +
-    labs(x= "Momentary Stress (within-person)", y="ER Initiation", color="Group", fill="Group") +
-    theme_classic() + theme(text=element_text(size=12)) +
-    scale_y_continuous(breaks = seq(0.1, 0.9, by=0.2), limits=c(0.1, 0.9)) +
-    scale_x_continuous(breaks = seq(-5, 5, by=2), limits=c(-5.5, 6))
+  geom_point() +
+  geom_line(size=1.2) +
+  geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=Group),alpha=0.3) +
+  labs(x= "Momentary Stress (within-person)", y="Probability of ER Initiation", color="Group", fill="Group") +
+  theme_classic() + 
+  theme(text=element_text(size=30),  # Increases all text size
+        axis.title=element_text(size=24, face="bold"),  # Larger axis labels
+        axis.text=element_text(size=22),  # Larger axis tick labels
+        legend.text=element_text(size=22),  # Larger legend text
+        legend.title=element_text(size=22, face="bold")) + # Larger legend title 
+  scale_y_continuous(breaks = seq(0.1, 0.9, by=0.2), limits=c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-5, 5, by=2), limits=c(-5.5, 6)) 
 g0w
+#grid.arrange(g0w,g1w, ncol=2)
+ef <- effects::effect(term="control_lag_w:stress_lag_w", xlevels= list(control_lag_w=c(-1.39, 1.37)), mod=control_ER)
+efdata<-as.data.frame(ef) #convert the effects list to a data frame
+efdata$control_lag_w<-as.factor(efdata$control_lag_w)
+g1w<-ggplot(efdata, aes(x=stress_lag_w, y=fit, color=control_lag_w,group=control_lag_w)) +
+  geom_point() +
+  geom_line(size=1.2) +
+  geom_ribbon(aes(ymin=fit-se, ymax=fit+se, fill=control_lag_w),alpha=0.3) +
+  labs(x= "Momentary Stress (within-person)", y="Probability of ER Initiation", color="Cont", fill="Cont") +
+  theme_classic() + 
+  theme(text=element_text(size=30),  # Increases all text size
+        axis.title=element_text(size=24, face="bold"),  # Larger axis labels
+        axis.text=element_text(size=22),  # Larger axis tick labels
+        legend.text=element_text(size=22),  # Larger legend text
+        legend.title=element_text(size=22, face="bold")) + # Larger legend title 
+  scale_y_continuous(breaks = seq(0.1, 0.9, by=0.2), limits=c(0.1, 0.9)) +
+  scale_x_continuous(breaks = seq(-5, 5, by=2), limits=c(-5.5, 6)) 
+g1w
 #grid.arrange(g0w,g1w, ncol=2)
 ```
 
