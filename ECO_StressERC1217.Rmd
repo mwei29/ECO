@@ -17,7 +17,7 @@ Between person (level 2): MCI status (young, CN, MCI)
 Outcome variables: 
 ER initiation
 
-```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE, cache=T}
+```{r setup, echo=FALSE, eval=TRUE, warning=FALSE, message=FALSE, cache=F}
 # Set up packages and upload data. 
 rm(list=ls());
 options(warnPartialMatchDollar=TRUE);   # safety option
@@ -27,10 +27,15 @@ library(lubridate); library(lme4); library(knitr); library(RColorBrewer); librar
 ## Data Quality Check
 
 ### Dataset Cleaning
-```{r center, eval=TRUE, echo=FALSE, warning=FALSE, cache=T, message=FALSE}
+```{r data, eval=TRUE, echo=FALSE, warning=FALSE, cache=F, message=FALSE}
 # Read in data set
 ESM_clean<-fread("ESM_clean.csv")
 survey <- fread("ECO_baseline.csv")
+cog.flu<-fread("ECO_ESM_person-level.csv")
+cog.flu<-cog.flu[,c("PID","sd.dimcard.uc","sd.flank.uc","sd.picmem.uc","sd.list.uc","sd.pattern.uc")]
+```
+
+```{r data_cleaning, eval=TRUE, echo=FALSE, warning=FALSE, cache=T, message=FALSE}
 # Clean situation control variable
 ESM_clean$situation_control <- as.numeric(ESM_clean$situation_control)
 ESM_clean$control_lag <- as.numeric(ESM_clean$control_lag)
@@ -55,6 +60,7 @@ data <-ESM_clean %>%
     control_gmc = scale(situation_control, center = T, scale = F),
     control_w = situation_control - control_pm,
     control_b = control_gmc - control_w,
+    NIHCB_gmc = scale(sd.cogflu.uc, center = T, scale = F),
     SF36.PCS_gmc = scale(SF36.PCS, center = T, scale = F))%>%
   group_by(PID,day) %>%
   mutate(
@@ -95,15 +101,48 @@ data$time0m <- data$time0 / 100000
 sum(data$completed == 1 & !is.na(data$esm_stressed_lag)) 
 # A total of 202 participants after excluding 17 participants when we only include people with at least 3 consecutive prompts:4 in YA, 7 in CN, 6 in MCI
 exclude_PIDs<-data_b$PID[data_b$consecutive_sum <= 2] 
+data_exclude <- data[!data$PID %in% exclude_PIDs,]
+# Examine excluded data
 length(exclude_PIDs)
 data_b_exclude <- data_b[!data_b$PID %in% exclude_PIDs,]
 table(data_b$Group)
 table(data_b_exclude$Group)
+```
+
+### Group Difference
+```{r group_diff, eval=TRUE, echo=TRUE, warning=FALSE, cache=T, message=FALSE}
 data_b_exclude %>%
   group_by(Group) %>%
   summarise(Summary = list(summary(completed_rate))) %>%
   unnest_wider(Summary)
-data_exclude<-data[!data$PID %in% exclude_PIDs,]
+range(data_b_exclude$completed_sum)
+mean(data_b_exclude$completed_sum)
+sd(data_b_exclude$completed_sum)
+data_b_exclude %>%
+  group_by(Group) %>%
+  summarise(
+    mean_completed = mean(completed_rate, na.rm = TRUE),
+    sd_completed = sd(completed_rate, na.rm = TRUE)
+  )
+anova_result <- aov(completed_rate ~ Group, data = data_b_exclude)
+summary(anova_result)
+eta_squared(anova_result)
+data_b_exclude %>%
+  group_by(Group) %>%
+  summarise(
+    mean_stress = mean(stress_pm, na.rm = TRUE),
+    sd_stress = sd(stress_pm, na.rm = TRUE)
+  )
+anova_result <- aov(stress_pm ~ Group, data = data_b_exclude)
+summary(anova_result)
+data_b_exclude %>%
+  group_by(Group) %>%
+  summarise(
+    mean_control = mean(control_pm, na.rm = TRUE),
+    sd_control = sd(control_pm, na.rm = TRUE)
+  )
+anova_result <- aov(control_pm ~ Group, data = data_b_exclude)
+summary(anova_result)
 ```
 
 ### Data distribution and Descriptive Stats
@@ -121,6 +160,15 @@ describe(data_b_exclude%>% filter(Group == "YA") %>% select(-PID, -Group))
 describe(data_b_exclude%>% filter(Group == "CN") %>% select(-PID, -Group))
 describe(data_b_exclude%>% filter(Group == "MCI") %>% select(-PID, -Group))
 describe(data_exclude %>% select(completed,esm_stressed,situation_control,ER_yes,Group_code,gender_bin,edu_bin,stress_pm,control_pm,ER_yes_pm,stress_w,stress_b,control_w,control_b,SF36.PCS_gmc,consecutive_sum))
+```
+
+### Cronbach's alpha for fluid cognitive composite score
+```{r Cronbach, eval=TRUE, echo=TRUE, warning=FALSE, cache=F, message=FALSE}
+cog.flu.alpha <- cog.flu %>%
+  group_by(PID)%>%
+  slice_head(n = 1) %>%
+  ungroup()
+alpha(cog.flu.alpha %>% select(-PID))
 ```
 
 ### Demographics
@@ -248,7 +296,9 @@ stats$pwg #Within-Person Correlation for Person-Mean Centered Scores
 
 ## Multilevel Modeling
 
-### Main Effect: Stress predicting overall ER use, lagged
+### Using Group
+
+#### Main Effect: Stress predicting overall ER use, lagged
 ```{r StressER,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
 data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
 ER <- glmer(ER_yes ~ stress_lag_w + stress_lag_b + control_lag_w + control_lag_b + 
@@ -273,7 +323,7 @@ verbose = TRUE)
 #Within person controllability is associated with an 5% decrease in the odds of initiating ER
 ```
 
-### control as a moderator
+#### control as a moderator
 ```{r controlER,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
 data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
 control_ER <-glmer(ER_yes ~ control_lag_w*stress_lag_w +  control_lag_b*stress_lag_w + stress_lag_b + Group + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
@@ -291,7 +341,7 @@ model_parameters(control_ER, CI = 0.95, ci_method = "wald", ci_random = NULL, bo
 verbose = TRUE)
 ```
 
-### Group as a moderator
+#### Group as a moderator
 ```{r GroupER,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
 data_exclude$Group <- relevel(data_exclude$Group, ref="MCI")
 ER_MCI <- glmer(ER_yes ~ stress_lag_w*Group + stress_lag_b*Group + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
@@ -356,7 +406,7 @@ YA_test_model <- glmer(ER_yes ~ stress_lag_w+ stress_lag_b + gender_bin + edu_bi
 summary(YA_test_model) #b=0.05
 ```
 
-### Graph
+#### Graph
 ```{r mod graphs, echo=TRUE, eval=TRUE, fig.width=10, fig.height=8, warning=F, cache=T, message=F}
 ef <- effects::effect(term="stress_lag_w:Group", mod=ER_MCI)
 efdata<-as.data.frame(ef) #convert the effects list to a data frame
@@ -396,3 +446,61 @@ g1w
 #grid.arrange(g0w,g1w, ncol=2)
 ```
 
+### Using Fluid Cognitive Score
+
+#### Main Effect: Stress predicting overall ER use, lagged
+```{r StressER_c,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
+ER <- glmer(ER_yes ~ stress_lag_w + stress_lag_b + control_lag_w + control_lag_b + 
+              NIHCB_gmc + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER)
+#As hypothesized, both within & between person stress increase the chance of ER initiation
+#Within person control decreases the chance of ER initiation
+
+#Odd ratio
+model_parameters(ER, CI = 0.95, ci_method = "wald", ci_random = NULL, bootstrap = FALSE, iterations = 1000,
+
+                 standardize = NULL, effects = "all", component = "all", group_level = FALSE,exponentiate = TRUE, p_adjust = NULL,
+
+                 wb_component = TRUE, summary = getOption("parameters_mixed_summary", FALSE), keep = NULL, drop = NULL,
+
+verbose = TRUE)
+#Within person stress is associated with an 11% increase in the odds of initiating ER
+#Between person stress is associated with an 53% increase in the odds of initiating ER
+#Within person controllability is associated with an 5% decrease in the odds of initiating ER
+```
+
+#### control as a moderator
+```{r controlER_c,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
+control_ER <-glmer(ER_yes ~ control_lag_w*stress_lag_w +  control_lag_b*stress_lag_w + stress_lag_b + NIHCB_gmc + gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(control_ER)
+#Odd ratio
+model_parameters(control_ER, CI = 0.95, ci_method = "wald", ci_random = NULL, bootstrap = FALSE, iterations = 1000,
+
+                 standardize = NULL, effects = "all", component = "all", group_level = FALSE,exponentiate = TRUE, p_adjust = NULL,
+
+                 wb_component = TRUE, summary = getOption("parameters_mixed_summary", FALSE), keep = NULL, drop = NULL,
+
+verbose = TRUE)
+```
+
+#### Group as a moderator
+```{r GroupER_c,echo=TRUE,eval=TRUE,warning=F, cache=T, message=F}
+ER_MCI <- glmer(ER_yes ~ stress_lag_w*NIHCB_gmc + stress_lag_b*NIHCB_gmc +  gender_bin + edu_bin + SF36.PCS_gmc + time0m + (1 + time0m | PID), 
+            family = binomial(link = "logit"),
+            data = data_exclude,
+            control = glmerControl(optimizer = "bobyqa"))
+summary(ER_MCI) 
+model_parameters(ER_MCI, CI = 0.95, ci_method = "wald", ci_random = NULL, bootstrap = FALSE, iterations = 1000,
+
+                 standardize = NULL, effects = "all", component = "all", group_level = FALSE,exponentiate = TRUE, p_adjust = NULL,
+
+                 wb_component = TRUE, summary = getOption("parameters_mixed_summary", FALSE), keep = NULL, drop = NULL,
+
+verbose = TRUE)
+```
